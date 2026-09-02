@@ -13,4 +13,5 @@ export {
   ZUNIA_WALLETCONNECT,
   ZUNIA_EXTENSION_IDS,
   ZUNIA_APP_IDS,
+  ZUNIA_CONNECT_BUTTON,
 } from "./constants.js";

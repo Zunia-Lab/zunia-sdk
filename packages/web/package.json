@@ -2,6 +2,15 @@
   "name": "@zunialab/sdk-web",
   "version": "0.1.0",
   "description": "Browser SDK for connecting dApps to the Zunia extension (window.zunia)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
+    "directory": "packages/web"
+  },
+  "homepage": "https://github.com/Zunia-Lab/zunia-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Zunia-Lab/zunia-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -10,7 +19,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./connect-button.css": "./src/connect-button.css"
   },
   "files": ["dist"],
   "scripts": {

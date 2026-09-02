@@ -8,8 +8,11 @@ documentation: https://docs.zuniawallet.com/docs/connect/sdk
 
 environment:
   sdk: ^3.5.0
+  flutter: ">=3.24.0"
 
 dependencies:
+  flutter:
+    sdk: flutter
   meta: ^1.15.0
 
 dev_dependencies:

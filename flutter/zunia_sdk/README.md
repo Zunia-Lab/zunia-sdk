@@ -19,6 +19,13 @@ import 'package:zunia_sdk/zunia_sdk.dart';
 
 final uri = ZuniaConnect.universalWalletConnectUri();
 final isOurs = ZuniaConnect.isZuniaConnectUri(uri);
+
+ConnectWithZuniaButton(
+  size: ConnectWithZuniaButtonSize.medium,
+  onPressed: () {
+    // Open WC / deep link with your session client.
+  },
+);
 ```
 
 Session management is intentionally out of scope until the wallet ships WC handlers. Use these constants with your WC client and the same Cloud `project_id` as Zunia apps.

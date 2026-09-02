@@ -40,3 +40,7 @@ export function useZunia(options?: GetZuniaOptions): UseZuniaResult {
 
 export { getZunia, enableZunia, isZuniaInstalled } from "@zunialab/sdk-web";
 export type { ZuniaProvider } from "@zunialab/sdk-core";
+export { ZUNIA_CONNECT_BUTTON } from "@zunialab/sdk-core";
+export { ConnectWithZuniaButton } from "./ConnectWithZuniaButton.js";
+export type { ConnectWithZuniaButtonProps } from "./ConnectWithZuniaButton.js";
+export { ZuniaMark } from "./ZuniaMark.js";

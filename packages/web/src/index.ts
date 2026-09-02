@@ -83,11 +83,22 @@ export function isZuniaInstalled(): boolean {
   return Boolean(getZuniaSync());
 }
 
+export { ZUNIA_MARK_SVG } from "./mark.js";
+export {
+  createConnectWithZuniaButton,
+  ensureConnectButtonStyles,
+} from "./connect-button.js";
+export type {
+  ConnectWithZuniaSize,
+  CreateConnectWithZuniaButtonOptions,
+} from "./connect-button.js";
+
 export {
   ZUNIA_WALLET,
   ZUNIA_DEEP_LINKS,
   ZUNIA_WALLETCONNECT,
   ZUNIA_PROVIDER_GLOBAL,
+  ZUNIA_CONNECT_BUTTON,
 } from "@zunialab/sdk-core";
 
 export type { ZuniaProvider, ZuniaOfflineSigner, ZuniaKey } from "@zunialab/sdk-core";

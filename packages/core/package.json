@@ -2,6 +2,15 @@
   "name": "@zunialab/sdk-core",
   "version": "0.1.0",
   "description": "Shared types and connect constants for Zunia wallet integrations",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/Zunia-Lab/zunia-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Zunia-Lab/zunia-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

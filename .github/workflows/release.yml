@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for npm provenance. Without this the publish still succeeds but ships no
+  # attestation, so consumers cannot verify where the tarball was built.
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify before publishing
+        run: |
+          pnpm typecheck
+          pnpm build
+
+      # pnpm, not npm: only pnpm rewrites the `workspace:*` ranges in sdk-web and
+      # sdk-react into real versions. `npm publish` would ship the literal protocol and
+      # every install would fail.
+      #
+      # --no-git-checks is required because a tag push leaves HEAD detached, which pnpm
+      # otherwise rejects as not being on the publish branch.
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

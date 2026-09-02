@@ -2,6 +2,15 @@
   "name": "@zunialab/sdk-react",
   "version": "0.1.0",
   "description": "React hooks for connecting to the Zunia browser extension",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/Zunia-Lab/zunia-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Zunia-Lab/zunia-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -14,8 +23,8 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --external react",
-    "dev": "tsup src/index.ts --format esm --dts --watch --external react",
+    "build": "tsup src/index.ts --format esm --dts --clean --external react --external @zunialab/sdk-web --external @zunialab/sdk-core",
+    "dev": "tsup src/index.ts --format esm --dts --watch --external react --external @zunialab/sdk-web --external @zunialab/sdk-core",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

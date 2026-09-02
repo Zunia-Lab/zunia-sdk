@@ -12,8 +12,8 @@
 |---------|----------|-----------|---------|
 | [`@zunialab/sdk-core`](./packages/core) | Shared | TypeScript | Types, connect constants, WC namespaces |
 | [`@zunialab/sdk-web`](./packages/web) | Browser | TypeScript | Detect `window.zunia`, enable, offline signer helpers |
-| [`@zunialab/sdk-react`](./packages/react) | React | TypeScript | Hooks / provider for web dApps |
-| [`zunia_sdk`](./flutter/zunia_sdk) | Flutter | Dart | Mobile deep links + WalletConnect config helpers |
+| [`@zunialab/sdk-react`](./packages/react) | React | TypeScript | Hooks + official Connect with Zunia button |
+| [`zunia_sdk`](./flutter/zunia_sdk) | Flutter | Dart | Mobile deep links, WC helpers, Connect with Zunia button |
 
 Use **web** when the user has the browser extension. Use **Flutter** (or WalletConnect via core constants) when connecting to the mobile wallet.
 
@@ -36,6 +36,19 @@ if (!zunia) throw new Error("Install Zunia extension");
 await enableZunia("cosmoshub-4");
 const signer = zunia.getOfflineSigner("cosmoshub-4");
 ```
+
+Official connect button (React):
+
+```tsx
+import { ConnectWithZuniaButton } from "@zunialab/sdk-react";
+
+<ConnectWithZuniaButton
+  installed={Boolean(zunia)}
+  onClick={() => enableZunia("cosmoshub-4")}
+/>
+```
+
+Vanilla web: `createConnectWithZuniaButton()` from `@zunialab/sdk-web`. Flutter: `ConnectWithZuniaButton`.
 
 ## Quick start (Flutter)
 
