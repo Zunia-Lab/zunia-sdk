@@ -30,7 +30,7 @@ export interface ConnectWithZuniaButtonProps
  * Official Connect with Zunia button for React dApps and the dashboard.
  *
  * If `installed` is false and no `onClick` is provided, the button opens
- * https://zuniawallet.com so the user can install the wallet.
+ * https://zunialab.com so the user can install the wallet.
  */
 export const ConnectWithZuniaButton = forwardRef<
   HTMLButtonElement,

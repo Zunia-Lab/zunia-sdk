@@ -3,8 +3,8 @@
 export const ZUNIA_WALLET = {
   name: "Zunia",
   shortName: "Zunia",
-  url: "https://zuniawallet.com",
-  docsUrl: "https://docs.zuniawallet.com",
+  url: "https://zunialab.com",
+  docsUrl: "https://docs.zunialab.com",
   icons: [
     "https://raw.githubusercontent.com/Zunia-Lab/zunia-brand/main/png/icons/app/zunia-icon-512.png",
   ],
@@ -18,9 +18,9 @@ export const ZUNIA_DEEP_LINKS = {
   mobileScheme: "zuniamobile",
   walletConnectScheme: "wc",
   walletConnectPath: "zunia://wc",
-  universalWc: "https://zuniawallet.com/wc",
-  universalConnect: "https://zuniawallet.com/connect",
-  linkWc: "https://link.zuniawallet.com/wc",
+  universalWc: "https://zunialab.com/wc",
+  universalConnect: "https://zunialab.com/connect",
+  linkWc: "https://link.zunialab.com/wc",
 } as const;
 
 export const ZUNIA_WALLETCONNECT = {
@@ -37,9 +37,32 @@ export const ZUNIA_WALLETCONNECT = {
   cosmosEvents: ["accountsChanged", "chainChanged"] as const,
 } as const;
 
+/** First-party Zunia-native connect (HTTP + WebSocket broker). */
+export const ZUNIA_NATIVE_CONNECT = {
+  protocolVersion: "zunia.connect.v1",
+  httpPath: "/v1/connect/sessions",
+  wsPath: "/v1/connect/ws",
+  /** Env for public WS base (ws:// in dev, wss:// in prod). */
+  wsPublicUrlEnv: "CONNECT_WS_PUBLIC_URL",
+  apiBaseEnv: "ZUNIA_CONNECT_API_BASE",
+  defaultMethods: [
+    "enable",
+    "getKey",
+    "getAccounts",
+    "signAmino",
+    "signDirect",
+    "signArbitrary",
+  ] as const,
+  defaultEvents: ["accountsChanged", "chainChanged"] as const,
+  unpairedTtlSeconds: 900,
+  pairedTtlSeconds: 86_400,
+  deepLinkPath: "zunia://connect",
+  universalPath: "https://zunialab.com/connect",
+} as const;
+
 export const ZUNIA_EXTENSION_IDS = {
   /** Firefox AMO / gecko id */
-  gecko: "extension@zuniawallet.com",
+  gecko: "extension@zunialab.com",
 } as const;
 
 export const ZUNIA_APP_IDS = {
@@ -51,7 +74,7 @@ export const ZUNIA_APP_IDS = {
 export const ZUNIA_CONNECT_BUTTON = {
   label: "Connect with Zunia",
   installLabel: "Install Zunia",
-  installUrl: "https://zuniawallet.com",
+  installUrl: "https://zunialab.com",
   fontFamily: "'Space Grotesk', system-ui, -apple-system, sans-serif",
   fg: "#FFFFFF",
   bg: "linear-gradient(120deg, #FF1B0C 0%, #FF6A10 50%, #FFC414 100%)",

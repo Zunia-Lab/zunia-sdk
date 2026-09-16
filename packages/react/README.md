@@ -16,4 +16,4 @@ const { zunia, loading } = useZunia();
 />
 ```
 
-Use `fullWidth={false}` in a toolbar. Omit `onClick` when `installed` is false to send the user to zuniawallet.com.
+Use `fullWidth={false}` in a toolbar. Omit `onClick` when `installed` is false to send the user to zunialab.com.
