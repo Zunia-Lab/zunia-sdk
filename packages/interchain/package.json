@@ -1,11 +1,11 @@
 {
-  "name": "@zunialab/sdk-core",
+  "name": "@zunialab/interchain",
   "version": "0.1.0",
-  "description": "Shared types and connect constants for Zunia wallet integrations",
+  "description": "Dependency-free IBC engine for Zunia: channel discovery, denom unwinding, PFM/ibc-hooks memos, cross-chain swaps and NFTs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
-    "directory": "packages/core"
+    "directory": "packages/interchain"
   },
   "homepage": "https://github.com/Zunia-Lab/zunia-sdk#readme",
   "bugs": {
@@ -21,17 +21,17 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsup src/index.ts --format esm --dts --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
   "publishConfig": {

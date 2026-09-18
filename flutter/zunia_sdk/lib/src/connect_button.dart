@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'session.dart';
+
 /// Official sizes for [ConnectWithZuniaButton].
 enum ConnectWithZuniaButtonSize { small, medium, large }
 
@@ -12,13 +14,26 @@ class ConnectWithZuniaButton extends StatelessWidget {
     required this.onPressed,
     this.size = ConnectWithZuniaButtonSize.medium,
     this.busy = false,
+    this.loading = false,
     this.label = 'Connect with Zunia',
+    this.onStatus,
   });
 
   final VoidCallback? onPressed;
   final ConnectWithZuniaButtonSize size;
+
+  /// Shows the spinner and disables the button while true.
   final bool busy;
+
+  /// Alias for [busy] (web SDK uses `loading`).
+  final bool loading;
+
   final String label;
+
+  /// Optional status listener when the parent drives session status updates.
+  final ValueChanged<ZuniaSessionStatus>? onStatus;
+
+  bool get _busy => busy || loading;
 
   double get _height => switch (size) {
         ConnectWithZuniaButtonSize.small => 30,
@@ -34,7 +49,7 @@ class ConnectWithZuniaButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null && !busy;
+    final enabled = onPressed != null && !_busy;
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: DecoratedBox(
@@ -64,14 +79,19 @@ class ConnectWithZuniaButton extends StatelessWidget {
           constraints: BoxConstraints.tightFor(height: _height),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: enabled ? onPressed : null,
+            onTap: enabled
+                ? () {
+                    onStatus?.call(ZuniaSessionStatus.connecting);
+                    onPressed!();
+                  }
+                : null,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (busy)
+                  if (_busy)
                     const SizedBox(
                       width: 12,
                       height: 12,
