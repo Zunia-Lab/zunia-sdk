@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 
 import {
@@ -1006,6 +1007,50 @@ test("a hop before the swap wraps the wasm memo in a forward to the contract", a
   assert.equal(viaJuno.receiver, "juno1intermediate");
   assert.equal(viaJuno.plan.requiresPfm, true);
   assert.equal(viaJuno.plan.requiresIbcHooks, true);
+});
+
+test("a swap names what it sells the way the venue sees it after every inbound hop", async () => {
+  const result = await planRoute(
+    request({
+      sourceChainId: "cosmoshub-4",
+      destChainId: "osmosis-1",
+      inputDenom: "uatom",
+      outputDenom: "uosmo",
+      allowSwap: true,
+      sender: "cosmos1sender",
+      maxHops: 3,
+    }),
+    deps(),
+    { intermediateReceivers: { "juno-1": "juno1intermediate" } },
+  );
+  const direct = result.candidates.find((c) => c.links[0]?.channelId === "channel-141");
+  const viaJuno = result.candidates.find((c) => c.links[0]?.channelId === "channel-207");
+  assert.ok(direct && viaJuno);
+  assert.equal(direct.venueInputDenom, ATOM_ON_OSMOSIS);
+  // Two wraps: Juno's channel-1 first, then Osmosis's channel-42 in front of it.
+  const twoHops = createHash("sha256")
+    .update("transfer/channel-42/transfer/channel-1/uatom")
+    .digest("hex")
+    .toUpperCase();
+  assert.equal(viaJuno.venueInputDenom, `ibc/${twoHops}`);
+});
+
+test("only a swap carries a venue input denom", async () => {
+  const transfer = await planRoute(request({ destChainId: "osmosis-1" }), deps());
+  assert.ok(transfer.best);
+  assert.equal(transfer.best.venueInputDenom, null);
+
+  const local = await planRoute(
+    request({
+      destChainId: "safrochain-1",
+      outputDenom: "uatom",
+      allowSwap: true,
+      recipient: SAFRO_ADDRESS,
+    }),
+    deps({ venues: [{ chainId: "safrochain-1", contractAddress: "addr_safro1router" }] }),
+  );
+  assert.equal(local.best?.strategy, "local-swap");
+  assert.equal(local.best?.venueInputDenom, "usafro");
 });
 
 test("a venue on the source chain is not planned as one route", async () => {

@@ -83,6 +83,7 @@ one would break the Dart mirror.
 | `route.ts` | types, channels, denom, memo, swap | Multi-hop route planning across the registry; produces ranked `RoutePlan`s. |
 | `nft.ts` | types, base64 | CW721 queries, ICS721 transfers, and the package's one `MsgExecuteContract` builder. |
 | `tracking.ts` | types, base64, lcd, nft | Per-hop packet status for a transfer the user already signed, plus XCS recovery. |
+| `transfer.ts` | types, memo | The ICS20 `MsgTransfer`, from its fields or from the first hop of a plan, always with a timestamp timeout. |
 | `tx.ts` | types, base64, lcd, memo | Account info, fee estimation, simulate, broadcast, inclusion polling, and the unsigned-tx payload for zunia-core. |
 | `index.ts` | all | The curated barrel. Every name is listed; there is no `export *`. |
 

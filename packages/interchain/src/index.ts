@@ -22,8 +22,9 @@
  * The layering, for anyone adding to it: `types.ts` depends on nothing;
  * `lcd.ts`, `base64.ts`, `registry.ts` and `channels.ts` depend only on it;
  * `memo.ts` and `denom.ts` sit above those; `swap.ts` above `memo.ts`; and
- * `route.ts` above all of them. `nft.ts`, `tracking.ts` and `tx.ts` are leaves.
- * There are no cycles and adding one would break the Dart mirror.
+ * `route.ts` above all of them. `nft.ts`, `tracking.ts`, `transfer.ts` and
+ * `tx.ts` are leaves. There are no cycles and adding one would break the Dart
+ * mirror.
  */
 
 /* -------------------------------------------------------------------------- *
@@ -430,6 +431,18 @@ export {
   trackRoute,
   XCS_RECOVER_EXECUTE_MSG,
 } from "./tracking.js";
+
+/* -------------------------------------------------------------------------- *
+ * transfer.ts - the ICS20 MsgTransfer every IBC route signs
+ * -------------------------------------------------------------------------- */
+
+export type { TransferMsgOptions, TransferMsgRequest } from "./transfer.js";
+export {
+  buildPlanTransferMsg,
+  buildTransferMsg,
+  DEFAULT_TRANSFER_TIMEOUT_MINUTES,
+  MSG_TRANSFER_TYPE_URL,
+} from "./transfer.js";
 
 /* -------------------------------------------------------------------------- *
  * tx.ts — everything around signing, and none of signing

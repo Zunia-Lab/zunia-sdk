@@ -813,6 +813,13 @@ export interface RoutePlanCandidate {
   readonly requiresQuote: boolean;
   /** Venue the swap runs on, or null for a plan with no swap. */
   readonly venue: SwapVenue | null;
+  /**
+   * What the swap sells, as the venue chain names it: the input after every
+   * hop into the venue has wrapped or unwound it. This is the denom to quote
+   * against. `null` for a plan with no swap, and for a swap whose arriving
+   * denom could not be computed, which the plan's warnings then say.
+   */
+  readonly venueInputDenom: string | null;
   /** True when the first hop sends a wrapped token back the way it came. */
   readonly unwindsDenom: boolean;
   /** Channels on the path that nobody has verified as open. */
@@ -1246,6 +1253,7 @@ export async function planRoute(
         quote: null,
         requiresQuote: false,
         venue: null,
+        venueInputDenom: null,
         unwindsDenom: false,
         unverifiedChannelCount: 0,
         packetHopCount: 0,
@@ -1313,6 +1321,8 @@ export async function planRoute(
       quote: null,
       requiresQuote: true,
       venue: localVenue,
+      // The venue is this chain, so the input is already named the venue's way.
+      venueInputDenom: request.inputDenom,
       unwindsDenom: false,
       unverifiedChannelCount: 0,
       packetHopCount: 0,
@@ -1493,6 +1503,7 @@ export async function planRoute(
         quote: null,
         requiresQuote: false,
         venue: null,
+        venueInputDenom: null,
         unwindsDenom,
         unverifiedChannelCount: unverified,
         packetHopCount: links.length,
@@ -1799,6 +1810,7 @@ export async function planRoute(
           quote: null,
           requiresQuote: true,
           venue,
+          venueInputDenom,
           unwindsDenom,
           unverifiedChannelCount: unverified,
           packetHopCount: totalHops,
