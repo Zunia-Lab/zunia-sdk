@@ -1552,19 +1552,14 @@ export async function trackRoute(
     if (!hop) break;
     throwIfAborted(options.signal, hop.chainId);
 
-    // A hop with no channel is a contract call inside packet processing — an
+    // A hop with no channel is a contract call inside packet processing, an
     // ibc-hooks swap. It sends no packet of its own, so its state is the state
-    // of the delivery that triggered it.
+    // of the delivery that triggered it, terminal states included: a swap that
+    // ends the route has to be able to settle it.
     if (hop.channelId === "") {
       const previous = traces[index - 1];
       const derived: PacketStatus =
-        index === 0
-          ? "pending"
-          : previous === undefined
-            ? "unknown"
-            : previous.status === "acknowledged" || previous.status === "received"
-              ? "received"
-              : previous.status;
+        index === 0 ? "pending" : previous === undefined ? "unknown" : previous.status;
       traces.push({
         ...emptyHop(index, derived),
         receiveTxHash: previousReceiveTxHash,

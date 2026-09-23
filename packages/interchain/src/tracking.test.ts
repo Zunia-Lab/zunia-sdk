@@ -1085,7 +1085,7 @@ test("trackRoute recognises swap output stuck in the crosschain-swaps contract",
 
   assert.equal(trace.hops[0]?.status, "acknowledged");
   // The swap hop moves no packet of its own; it mirrors the delivery that ran it.
-  assert.equal(trace.hops[1]?.status, "received");
+  assert.equal(trace.hops[1]?.status, "acknowledged");
   assert.equal(trace.hops[2]?.sequence, "3");
   assert.equal(trace.hops[2]?.status, "timeout");
   assert.equal(trace.status, "timeout");
@@ -1093,6 +1093,46 @@ test("trackRoute recognises swap output stuck in the crosschain-swaps contract",
   assert.equal(trace.recovery?.chainId, "osmosis-1");
   assert.equal(trace.recovery?.recoveryAddress, "osmo1recovery");
   assert.equal(decodeBase64Utf8(String(trace.recovery?.msg?.value.msg)), '{"recover":{}}');
+});
+
+test("trackRoute settles a swap whose output stays on the venue chain", async () => {
+  const source = chainStub("safrochain-1", {
+    txs: { SOURCEHASH: SOURCE_TX },
+    searches: {
+      "acknowledge_packet.": [
+        txResponse({ hash: "ACKTX", events: [plainEvent("acknowledge_packet", PACKET_EVENT_ATTRS)] }),
+      ],
+    },
+  });
+  const osmosis = chainStub("osmosis-1", {
+    searches: {
+      "write_acknowledgement.": [
+        txResponse({
+          hash: "SWAPTX",
+          timestamp: "2026-09-06T10:00:40Z",
+          events: [
+            plainEvent("write_acknowledgement", { ...PACKET_EVENT_ATTRS, packet_ack: '{"result":"AQ=="}' }),
+          ],
+        }),
+      ],
+    },
+  });
+
+  const trace = await trackRoute(
+    planOf([
+      hop({ chainId: "safrochain-1", counterpartyChainId: "osmosis-1" }),
+      hop({ chainId: "osmosis-1", channelId: "", counterpartyChainId: "osmosis-1", kind: "swap" }),
+    ]),
+    "SOURCEHASH",
+    resolverOf({ "safrochain-1": source, "osmosis-1": osmosis }),
+    { now: () => AFTER_TIMEOUT },
+  );
+
+  assert.equal(trace.hops[1]?.status, "acknowledged");
+  assert.equal(trace.hops[1]?.receiveTxHash, "SWAPTX");
+  assert.equal(trace.status, "acknowledged");
+  assert.equal(trace.failure, null);
+  assert.equal(trace.currentHopIndex, 1);
 });
 
 test("trackRoute says so when stuck swap output has no recovery address", async () => {
