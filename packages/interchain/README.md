@@ -14,7 +14,7 @@ IBC channel discovery was written three times, once per client:
 | Dashboard | `zunia-dashboard/src/lib/server/ibc-channels.ts` |
 | Mobile | `zunia-mobile/lib/services/chain_client.dart` (IBC section) |
 
-The three copies were near-identical and already drifting — different timeouts,
+The three copies were near-identical and already drifting - different timeouts,
 one carrying `counterpartyPortId` and the others not, one gated behind the
 live-reads privacy setting and one not. Every new IBC feature would have been
 written three more times.
@@ -41,7 +41,7 @@ and `bech32PrefixOf` here are correct; the extension's copies still are not.
 ## This package never signs
 
 It holds no private key, derives no address, and produces no signature. It
-builds request payloads — a `BuiltMsg` is a proto type URL plus a JSON value —
+builds request payloads - a `BuiltMsg` is a proto type URL plus a JSON value -
 and parses responses. Signing and key material stay in `zunia-core`
 (Rust → WASM in the browser, FFI on mobile).
 
@@ -52,7 +52,7 @@ If you find yourself needing a key in here, the design is wrong.
 - **Zero runtime dependencies.** Only web-standard APIs that exist in both an
   MV3 service worker and Node 22: `fetch`, `AbortController`, `TextEncoder`,
   `TextDecoder`, `crypto.subtle`, `URL`, `JSON`. No `node:` imports, no cosmjs,
-  no `Buffer` — hence the hand-written base64.
+  no `Buffer` - hence the hand-written base64.
 - **All network access goes through `lcd.ts`.** No feature module calls
   `fetch`; `grep -rn "fetch(" src --include='*.ts' | grep -v test` returns two
   lines, both in `lcd.ts`. Timeouts, retries, endpoint fallback, caching, the
@@ -72,8 +72,8 @@ one would break the Dart mirror.
 
 | Module | Depends on | Responsibility |
 |--------|-----------|----------------|
-| `types.ts` | — | The shared contract: chain metadata, `LcdClient`, routes, denoms, NFTs, `InterchainError`, and the one protocol constant `TRANSFER_PORT`. |
-| `lcd.ts` | types | The one transport. Per-attempt timeout, bounded retry with backoff, ordered endpoint fallback, TTL cache, live-reads gate — and `postJson`, used only by simulate and broadcast. |
+| `types.ts` | - | The shared contract: chain metadata, `LcdClient`, routes, denoms, NFTs, `InterchainError`, and the one protocol constant `TRANSFER_PORT`. |
+| `lcd.ts` | types | The one transport. Per-attempt timeout, bounded retry with backoff, ordered endpoint fallback, TTL cache, live-reads gate - and `postJson`, used only by simulate and broadcast. |
 | `base64.ts` | types | base64 / base64url for `Uint8Array` and UTF-8 strings, for wasm smart queries and ICS721 payloads. |
 | `registry.ts` | types | Chain lookup and feature checks, bech32 validation and prefix extraction (`addr_safro` included), and the persistable channel-route cache. |
 | `channels.ts` | types | Transfer-channel discovery and validation, counterparty checks, PFM / ibc-hooks probes. Replaces the three copies above and keeps their user-facing copy. |
@@ -106,7 +106,7 @@ off the code, never off the message:
 | `unsupported-environment` | A required web API is missing (`crypto.subtle` on plain http). | Serve the host over https. |
 | `invalid-memo` | A memo violates the middleware rules. | Our bug; never show raw JSON. |
 | `slippage-exceeded` | The quote moved past tolerance. | Re-quote or raise tolerance. |
-| `packet-timeout` | The packet timed out. Funds are refunded. | Say so — a timeout reads like a loss. |
+| `packet-timeout` | The packet timed out. Funds are refunded. | Say so - a timeout reads like a loss. |
 | `contract-error` | A CosmWasm query or execution failed. | Developer-facing. |
 | `tx-rejected` | The chain refused the transaction. | See `TxFailure.kind` and `retryable`. |
 | `malformed-response` | An endpoint answered with the wrong shape. | Treat the endpoint as broken. |
@@ -148,7 +148,7 @@ if (chain && lcdEndpointsFromChain(chain).length > 0) {
     const body = await lcd(chain).getJson("/ibc/core/channel/v1/channels", {
       query: { "pagination.limit": 100 },
     });
-    // `body` is `unknown` — narrow it before use.
+    // `body` is `unknown` - narrow it before use.
   } catch (error) {
     if (isInterchainError(error) && error.code === "reads-disabled") {
       // Prompt for the setting; this is not a network failure.
@@ -185,67 +185,67 @@ const result = await planRoute(request, {
 markers across nine files. Each is a claim about an upstream shape that
 `INTERCHAIN-SPEC.md` does not cover, modelled defensively and flagged in place.
 
-1. **`channels.ts:72` — `PFM_PROBE_PATHS`.** How to detect that a chain runs
+1. **`channels.ts:72` - `PFM_PROBE_PATHS`.** How to detect that a chain runs
    packet-forward-middleware is not in the spec. Confirm
    `/ibc/apps/packetforward/v1/params` against a live Osmosis or Neutron LCD.
-2. **`channels.ts:89` — `IBC_HOOKS_PROBE_PATHS`.** Weaker still: `x/ibc-hooks`
+2. **`channels.ts:89` - `IBC_HOOKS_PROBE_PATHS`.** Weaker still: `x/ibc-hooks`
    is middleware and several releases register no query service, so detection
    falls back to "is CosmWasm present", which can rule the module out but never
    in. Expect `status: "unknown"` on Osmosis itself.
-3. **`denom.ts:53` — ibc-go v9's `/ibc/apps/transfer/v1/denoms/{hash}`** and its
+3. **`denom.ts:53` - ibc-go v9's `/ibc/apps/transfer/v1/denoms/{hash}`** and its
    `{denom:{base,trace:[{port_id,channel_id}]}}` body. Tried only after the
    documented path 404s.
-4. **`memo.ts:66` — `PACKET_MEMO_MAX_BYTES = 32768`.** The spec says nothing
+4. **`memo.ts:66` - `PACKET_MEMO_MAX_BYTES = 32768`.** The spec says nothing
    about memo length. Every builder takes `MemoLimits.maxBytes`, so a wrong
    number is a config change, not a code change.
-5. **`memo.ts:307` — PFM `retries` is a `uint8`.** From the middleware's Go
+5. **`memo.ts:307` - PFM `retries` is a `uint8`.** From the middleware's Go
    type, from memory. The spec only says "an integer".
-6. **`memo.ts:526` — `wasmHookReceiver()` returns the contract, not `""`.**
+6. **`memo.ts:526` - `wasmHookReceiver()` returns the contract, not `""`.**
    Both are legal per the spec; the contract was chosen because
    `MsgTransfer.ValidateBasic` is believed to reject a blank receiver. If that
    is wrong the choice is still safe and only the reason changes.
-7. **`memo.ts:681` — XCS `slippage_percentage` is capped at 100.** Read as a
+7. **`memo.ts:681` - XCS `slippage_percentage` is capped at 100.** Read as a
    percentage; the spec's example is `"20"` with no stated range.
-8. **`memo.ts:745` — `next_memo` is always emitted, `null` when absent.** Not
+8. **`memo.ts:745` - `next_memo` is always emitted, `null` when absent.** Not
    verified whether the contract's `Option` field carries a serde default.
-9. **`nft.ts:76` — cw-ics721 `IbcOutgoingMsg.timeout`.** Assumed non-optional
+9. **`nft.ts:76` - cw-ics721 `IbcOutgoingMsg.timeout`.** Assumed non-optional
    and shaped as `cosmwasm_std::IbcTimeout` (`{"timestamp":"<nanos>"}`). The
    spec guarantees only `receiver` and `channel_id`.
    `Ics721TransferOptions.timeout` overrides the whole object without a release.
-10. **`nft.ts:1002` — a bare CID `token_uri`** (`Qm…` / `bafy…`, no scheme) is
+10. **`nft.ts:1002` - a bare CID `token_uri`** (`Qm…` / `bafy…`, no scheme) is
     treated as IPFS. A heuristic, not a rule.
-11. **`nft.ts:1440` — `MsgExecuteContract.msg` is standard base64** of the JSON
+11. **`nft.ts:1440` - `MsgExecuteContract.msg` is standard base64** of the JSON
     bytes. `zunia-core/crates/cosmos/src/msg.rs` has
     `ExecuteContract { …, msg: Vec<u8> }` but no serde derive and no binding, so
     this is proto-JSON semantics chosen for round-tripping. One builder now
     (`buildExecuteContractMsg`), used by both `nft.ts` and `tracking.ts`, so
     there is exactly one line to change if the kernel disagrees.
-12. **`registry.ts:899` — the seed channel table.** Only
+12. **`registry.ts:899` - the seed channel table.** Only
     `cosmoshub-4 channel-141 ⇄ osmosis-1 channel-0` ships. **There is no
     Safrochain seed**, because no channel number for it could be confirmed from
     a primary source; discovery finds it at runtime. A test fails if a
     Safrochain row is added without a citation.
-13. **`route.ts:768` — the duration model.** 20s base, 40s per hop, 15s per
+13. **`route.ts:768` - the duration model.** 20s base, 40s per hop, 15s per
     swap. Invented. Override `RouteDurationModel` with real telemetry.
-14. **`route.ts:881` — the ICS20 receiver on an intermediate PFM chain.** The
+14. **`route.ts:881` - the ICS20 receiver on an intermediate PFM chain.** The
     spec documents `forward.receiver` inside the memo and nothing about the
     packet's own receiver. `PlanRouteOptions.intermediateReceivers` lets the
     host supply real addresses; without them the planner uses `"pfm"` **and
     warns that the host must replace it before signing**. This is the one field
     where a wrong choice loses funds.
-15. **`route.ts:1660` — XCS `receiver` semantics after the swap.** Assumed to be
+15. **`route.ts:1660` - XCS `receiver` semantics after the swap.** Assumed to be
     an address on the chain immediately after Osmosis, with `next_memo` carrying
     anything beyond. Consistent with the spec, not stated by it.
-16. **`tracking.ts:31` — every IBC event name and SDK tx-response shape.**
+16. **`tracking.ts:31` - every IBC event name and SDK tx-response shape.**
     `send_packet`, `recv_packet`, `write_acknowledgement`, `acknowledge_packet`,
     `timeout_packet`, `ibc_transfer`, `fungible_token_packet`, the
     `packet_*` attributes, base64-vs-plain attributes, `tx_response.events` vs
     `logs[].events`, and both `?query=` and `?events=` tx search spellings.
-17. **`tracking.ts:374` — ICS20 v2 `tokens[]` packet data.** Read as a fallback.
-18. **`swap.ts:68` — `/osmosis/poolmanager/v1beta1/Params`,** capitalised. The
+17. **`tracking.ts:374` - ICS20 v2 `tokens[]` packet data.** Read as a fallback.
+18. **`swap.ts:68` - `/osmosis/poolmanager/v1beta1/Params`,** capitalised. The
     lowercase spelling is HTTP 501. It looks like a typo and someone will
     helpfully "fix" it.
-19. **`tx.ts:1095` — the `UnsignedTxRequest` payload.** Modelled on
+19. **`tx.ts:1095` - the `UnsignedTxRequest` payload.** Modelled on
     `zunia-core/crates/cosmos/src/tx.rs`, but the Rust `Msg` enum derives no
     `Serialize`/`Deserialize` today and nothing consumes this payload yet.
 
@@ -271,7 +271,7 @@ markers across nine files. Each is a claim about an upstream shape that
 
 ### Behaviour worth a second opinion
 
-Not bugs — decisions with a plausible other answer, each a one-line change.
+Not bugs - decisions with a plausible other answer, each a one-line change.
 
 - `counterparty.status` `"unreachable"` and `"skipped"` do **not** fail a
   channel check. Only `not-found` / `not-open` / `mismatch` do. Blocking a send

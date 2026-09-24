@@ -1,7 +1,7 @@
 {
   "name": "@zunialab/sdk-web",
   "version": "0.1.0",
-  "description": "Browser SDK for connecting dApps to the Zunia extension (window.zunia)",
+  "description": "Connect a web dApp to the Zunia wallet: browser extension, phone by QR code, or WalletConnect",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
@@ -18,15 +18,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
-    "./connect-button.css": "./src/connect-button.css"
+    "./connect-button.css": "./dist/connect-button.css",
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build": "tsup src/index.ts --format esm --dts --clean && node -e \"require('node:fs').copyFileSync('src/connect-button.css', 'dist/connect-button.css')\"",
     "dev": "tsup src/index.ts --format esm --dts --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\""
@@ -56,5 +59,16 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "keywords": [
+    "zunia",
+    "cosmos",
+    "wallet",
+    "dapp",
+    "walletconnect",
+    "cosmjs"
+  ],
+  "sideEffects": [
+    "*.css"
+  ]
 }

@@ -13,9 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The pnpm version comes from "packageManager" in package.json.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           # 22, matching release.yml. @zunialab/interchain's test script passes a glob to
@@ -24,6 +23,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Build first: the web and react tests import their dependencies' dist output.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
+      - name: Lint the packed packages (publint, attw)
+        run: pnpm check:packages
+      - name: Install the tarballs in a Node script and a Vite app
+        run: pnpm smoke:tarballs

@@ -21,8 +21,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -32,10 +30,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # sdk-core, sdk-web and sdk-react share one version (see .changeset/config.json).
+      - name: Check the tag matches the package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for pkg in core web react; do
+            version=$(node -p "require('./packages/$pkg/package.json').version")
+            if [ "$version" != "$tag" ]; then
+              echo "packages/$pkg is at $version but the tag is v$tag"
+              exit 1
+            fi
+          done
+
       - name: Verify before publishing
         run: |
-          pnpm typecheck
           pnpm build
+          pnpm typecheck
+          pnpm test
+          pnpm check:packages
+          pnpm smoke:tarballs
 
       # pnpm, not npm: only pnpm rewrites the `workspace:*` ranges in sdk-web and
       # sdk-react into real versions. `npm publish` would ship the literal protocol and

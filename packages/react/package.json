@@ -1,7 +1,7 @@
 {
   "name": "@zunialab/sdk-react",
   "version": "0.1.0",
-  "description": "React hooks for connecting to the Zunia browser extension",
+  "description": "React hooks and components for connecting to the Zunia wallet",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
@@ -18,11 +18,14 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean --external react --external @zunialab/sdk-web --external @zunialab/sdk-core",
@@ -50,5 +53,13 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "keywords": [
+    "zunia",
+    "cosmos",
+    "wallet",
+    "react",
+    "dapp"
+  ],
+  "sideEffects": false
 }

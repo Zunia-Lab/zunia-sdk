@@ -1,7 +1,7 @@
 {
   "name": "@zunialab/sdk-core",
   "version": "0.1.0",
-  "description": "Shared types and connect constants for Zunia wallet integrations",
+  "description": "Types, sign-in messages, server-side verification and zunia.connect.v2 crypto for Zunia wallet integrations",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Zunia-Lab/zunia-sdk.git",
@@ -18,11 +18,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "test-vectors",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
@@ -45,5 +49,14 @@
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "@scure/base": "^2.4.0"
-  }
+  },
+  "keywords": [
+    "zunia",
+    "cosmos",
+    "wallet",
+    "sign-in",
+    "adr-036",
+    "cosmjs"
+  ],
+  "sideEffects": false
 }

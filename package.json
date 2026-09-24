@@ -6,9 +6,16 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
-    "test": "pnpm -r --if-present run test"
+    "test": "pnpm -r --if-present run test",
+    "check:packages": "node scripts/check-packages.mjs",
+    "smoke:tarballs": "node scripts/smoke-tarballs.mjs",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.3",
+    "publint": "^0.3.24",
     "turbo": "^2.5.0",
     "typescript": "^5.7.0"
   }
