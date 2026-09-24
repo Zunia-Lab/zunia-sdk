@@ -1,38 +1,61 @@
 "use client";
 
-import type { CreateConnectSessionResponse, ZuniaSessionStatus } from "@zunialab/sdk-core";
-import { ZUNIA_CONNECT_BUTTON } from "@zunialab/sdk-core";
+import { useEffect, useId, useRef } from "react";
+import type { ZuniaPairing, ZuniaSessionStatus } from "@zunialab/sdk-core";
+import { ZUNIA_CONNECT_BUTTON, ZUNIA_DEEP_LINKS } from "@zunialab/sdk-core";
+import { ZuniaQrCode } from "./ZuniaQrCode.js";
 
-export function ConnectPairingModal({
-  open,
-  onOpenChange,
-  status,
-  pairing,
-  statusLabel,
-}: {
+export interface ConnectPairingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  status: ZuniaSessionStatus | string;
-  pairing?: CreateConnectSessionResponse;
-  statusLabel?: string;
-}) {
-  if (!open) return null;
+  status: ZuniaSessionStatus;
+  pairing?: ZuniaPairing;
+  /** The 6-digit code from the session. The phone must show the same one. */
+  verificationCode?: string;
+  error?: { message: string };
+  title?: string;
+}
 
-  const label =
-    statusLabel ??
-    (status === "connecting"
-      ? "Preparing secure session…"
-      : status === "awaiting_wallet"
-        ? "Scan with the Zunia mobile app or open the deep link."
-        : status === "error"
-          ? "Connection failed"
-          : String(status));
+/** Link that opens the Zunia app on the same phone, for mobile browsers. */
+export function pairingDeepLink(pairing: ZuniaPairing): string {
+  return pairing.transport === "native-ws" ? pairing.uri : `${ZUNIA_DEEP_LINKS.walletConnectPath}?uri=${encodeURIComponent(pairing.uri)}`;
+}
+
+function describe(status: ZuniaSessionStatus, code: string | undefined, error: { message: string } | undefined): string {
+  if (error && (status === "disconnected" || status === "error")) return error.message;
+  if (status === "connecting") return "Preparing a secure session...";
+  if (status === "awaiting_wallet") {
+    return code ? "Check that your phone shows this code, then approve there." : "Scan with the Zunia app on your phone.";
+  }
+  if (status === "connected") return "Connected.";
+  return "";
+}
+
+/**
+ * QR pairing dialog: shows the code to scan, then the 6-digit code to compare
+ * with the phone. The phone also shows the site the relay saw, so a copied QR
+ * code on another site does not look like yours.
+ */
+export function ConnectPairingModal({ open, onOpenChange, status, pairing, verificationCode, error, title = "Connect with Zunia" }: ConnectPairingModalProps) {
+  const titleId = useId();
+  const dialog = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    dialog.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+
+  if (!open) return null;
+  const message = describe(status, verificationCode, error);
+  const digits = verificationCode ? `${verificationCode.slice(0, 3)} ${verificationCode.slice(3)}` : undefined;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Connect with Zunia"
       style={{
         position: "fixed",
         inset: 0,
@@ -46,6 +69,11 @@ export function ConnectPairingModal({
       onClick={() => onOpenChange(false)}
     >
       <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         style={{
           width: "100%",
           maxWidth: 360,
@@ -55,35 +83,34 @@ export function ConnectPairingModal({
           padding: 24,
           fontFamily: ZUNIA_CONNECT_BUTTON.fontFamily,
           textAlign: "center",
+          outline: "none",
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
-        <div style={{ fontSize: 12, letterSpacing: "0.08em", opacity: 0.7 }}>
-          CONNECT WITH ZUNIA
-        </div>
-        <div
-          style={{
-            margin: "16px auto",
-            width: 200,
-            height: 200,
-            borderRadius: 16,
-            background: "#fff",
-            color: "#111",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 12,
-            fontFamily: "ui-monospace, monospace",
-            fontSize: 9,
-            wordBreak: "break-all",
-          }}
-        >
-          {pairing?.qrPayload?.slice(0, 120) ?? "…"}
-        </div>
-        <p style={{ fontSize: 13, opacity: 0.8, margin: "0 0 16px" }}>{label}</p>
-        {pairing?.deepLink ? (
+        <h2 id={titleId} style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          {title}
+        </h2>
+        {pairing && !digits ? (
+          <div style={{ margin: "16px auto", width: 220, borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+            <ZuniaQrCode value={pairing.uri} size={220} label="Pairing QR code" />
+          </div>
+        ) : null}
+        {digits ? (
+          <div
+            aria-label={`Verification code ${verificationCode}`}
+            style={{ margin: "20px 0 8px", fontSize: 40, fontWeight: 600, letterSpacing: "0.08em", fontVariantNumeric: "tabular-nums" }}
+          >
+            {digits}
+          </div>
+        ) : null}
+        {message ? (
+          <p role="status" style={{ fontSize: 13, opacity: 0.8, margin: "0 0 16px" }}>
+            {message}
+          </p>
+        ) : null}
+        {pairing && !digits ? (
           <a
-            href={pairing.deepLink}
+            href={pairingDeepLink(pairing)}
             style={{
               display: "inline-block",
               padding: "10px 16px",
@@ -95,20 +122,14 @@ export function ConnectPairingModal({
               marginBottom: 12,
             }}
           >
-            Open Zunia app
+            Open the Zunia app
           </a>
         ) : null}
         <div>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "rgba(255,255,255,0.7)",
-              cursor: "pointer",
-              fontSize: 13,
-            }}
+            style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13 }}
           >
             Cancel
           </button>

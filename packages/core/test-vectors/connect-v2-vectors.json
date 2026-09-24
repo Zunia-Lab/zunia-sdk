@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "about": "zunia.connect.v2 vectors, shared by the JS SDK and the Dart wallet. Secret keys and nonces are fixed here; real sessions use random ones. Keys: X25519, salt SHA-256('zunia.connect.v2' 0x00 sessionId 0x00 dappPublicKey walletPublicKey), HKDF-SHA256 with info 'zunia.connect.v2 dapp->wallet', 'zunia.connect.v2 wallet->dapp' (32 bytes each) and 'zunia.connect.v2 verification code' (4 bytes, big-endian, mod 1000000, 6 digits). Frames: ChaCha20-Poly1305, 12-byte nonce, associated data 'zunia.connect.v2|<sessionId>|<sender>->...', plaintext the JSON envelope. Binary values are hex, public keys, nonces and ciphertexts unpadded base64url.",
+  "keyAgreement": [
+    {
+      "name": "first session",
+      "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A",
+      "dappSecretKey": "331e3cbbe458df515b2cf26421011a7dfc04c33e8dd29e5c5e224bb0d12fa26f",
+      "walletSecretKey": "1cd81fd6b5e96c1466d5965c88d8c249590653999ca466d1719adfd629f0ecf8",
+      "dappPublicKey": "6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg",
+      "walletPublicKey": "pBZ6UFEQy75lpk0dBAHVlDRXJoO-rw-RzYK_k5JpHFc",
+      "sharedSecret": "a9cbbe2ac84c41579f9e8d628b33283e2771928fc9748548ddaac127fbb78d76",
+      "transcript": "4e0513118c738bc248ab4d0e212b2f7af896f2074ca390a576230053ea7cc07a",
+      "dappToWallet": "e6197d655ca51e87047d724c85704db02aeb7b066c924e4bff94b0aa9c8f144d",
+      "walletToDapp": "253f408a49bed8c8c3a0acf32a8f315716811dfb4a95f077d20ee85d99ac2466",
+      "verificationCode": "275035"
+    },
+    {
+      "name": "second session",
+      "sessionId": "aB-_09zzYYxxWWvvUUttSs",
+      "dappSecretKey": "dba0ef87865ddb24ab3af4810aca785516b910216fd413241ea24989507eebe7",
+      "walletSecretKey": "d1709f23d87f397621351ee03568fb962f47ac23d6bf386da0ba2a8e7095d09b",
+      "dappPublicKey": "DNvs8EqgYLokzn7aoxpC4lnNMh0zqrPjQ1ldm8mpkyQ",
+      "walletPublicKey": "B6w-MVWsfETLbtt_ZhP4EzvH58vCfxus77996gMZYiI",
+      "sharedSecret": "99b73dd72b8cc092b66dbb4172a08c20244afda8d274b34b3d35701a8a639a71",
+      "transcript": "a10e1662d92a9be0fd2a79f1521d066ecf35e7abfc2ba8c30282a782e1e7313d",
+      "dappToWallet": "de17e2e1bb10eb2c2476904bb6846e84593eaedcc3441a517e3e58c2aaaaabd6",
+      "walletToDapp": "f681556549e20f00f3da5e485df167ba1798507b97b6d359aa0c2a34da0bad18",
+      "verificationCode": "906840"
+    }
+  ],
+  "frames": [
+    {
+      "name": "dApp connect request",
+      "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A",
+      "sender": "dapp",
+      "key": "e6197d655ca51e87047d724c85704db02aeb7b066c924e4bff94b0aa9c8f144d",
+      "nonce": "-Eple3KTo7yh2n90",
+      "aad": "zunia.connect.v2|Zf3kQ9xTn2LmP8vR4sWb1A|dapp->wallet",
+      "plaintext": "{\"seq\":1,\"type\":\"connect_request\",\"id\":\"req-1\",\"payload\":{\"metadata\":{\"name\":\"Example dApp\",\"url\":\"https://app.example.com\"},\"chains\":[\"cosmoshub-4\"],\"methods\":[\"get_accounts\",\"sign_amino\",\"sign_direct\",\"sign_arbitrary\"],\"events\":[\"accounts_changed\",\"chains_changed\"]}}",
+      "ciphertext": "0LaYqYi5Ojqxr3lAg6dqrR3qL9sM3CIHL9Ocr0FbaP9bhXa1C68YygZiNxgCwmZ7jy4KffQKILbEnOi0bYxnY0zrmGARm7Dsptz_KEg-O91gVhpuE_T0hEiRA-5kY6axhmgkdKladIABS4m37ss902PMunsZ0uzNiTk1iTHgVdN68YKf0InX9iQ6Rd6OmmItnGDsZmFeqBsspKOlNZ1RSNbUWFIiHLo15YfO-MIqsmmjguWaRm_xNZBBAYSRZc3cjKn07RgWPkw9kynKdrVSOd3XazUN4tlykzt6ze70ioLDcehFvMsNAPAGP_xDm2-Ni4-cdRo9jGIYzVu4HckXTicsMKOhOxmiAXWC_LkQOm66-ImNT1_soMCMbgq7"
+    },
+    {
+      "name": "wallet approval",
+      "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A",
+      "sender": "wallet",
+      "key": "253f408a49bed8c8c3a0acf32a8f315716811dfb4a95f077d20ee85d99ac2466",
+      "nonce": "GjH6ebfkwqqOTGnH",
+      "aad": "zunia.connect.v2|Zf3kQ9xTn2LmP8vR4sWb1A|wallet->dapp",
+      "plaintext": "{\"seq\":1,\"type\":\"connect_approve\",\"id\":\"req-1\",\"payload\":{\"accounts\":[{\"chainId\":\"cosmoshub-4\",\"address\":\"cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu\",\"algo\":\"secp256k1\",\"pubKey\":\"A08EGB1Yr3xkMq8mq8ph1CL9JOhZEAVbc6CHcQJRTx4D\"}],\"chains\":[\"cosmoshub-4\"]}}",
+      "ciphertext": "asd18gIEBVLNbQBPh4FdUUrS5eCZ1gLdfkbiZcA4AZfkVxkpbYvC21fE5XcYSph2nIdxcwRbz68Xch7-I-Z9m9LE7RjW0VvRZysq1HB2SUZqA8Mx50lEiiGyABjJzZGcQK1zT77cmzNYx_WRwCi-0_0zFIgRWbwCJFxSheK9oKoyk8CVUsQNXWeZYnKNYRejOTP7Op3cnV9aIZTeaK6gcdFxepkpZ0WOny-M15FR_wXKkt2gSfpToGYeUwhiQ6XZ-SZGcceqtsRmTq7yq3l6QDbudbolJxZTxWNNObxmC8nv1s1MjLvNBDrCIuMqe_jHpKRpMfnFslOELPbbP6oxHmaIMcrNTYjZJyA8H7bmCPg"
+    },
+    {
+      "name": "wallet event",
+      "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A",
+      "sender": "wallet",
+      "key": "253f408a49bed8c8c3a0acf32a8f315716811dfb4a95f077d20ee85d99ac2466",
+      "nonce": "ksByYCat0DvJ2X55",
+      "aad": "zunia.connect.v2|Zf3kQ9xTn2LmP8vR4sWb1A|wallet->dapp",
+      "plaintext": "{\"seq\":2,\"type\":\"chains_changed\",\"payload\":{\"chains\":[\"cosmoshub-4\",\"osmosis-1\"]}}",
+      "ciphertext": "ULCE6awYMo2AMPX5vJ8m9d0Nb52wWzwQC3bCReWCiefgNMyxTRqqI1tPWWYkRFhPPdkwQzzUKpWKMQA-SYCPzGHwKx_-E262uP9TTJjZyU7ePq2txcGRTytc4fhSxv5cKjY"
+    }
+  ],
+  "verificationCodes": [
+    {
+      "bytes": "00000000",
+      "code": "000000"
+    },
+    {
+      "bytes": "000f423f",
+      "code": "999999"
+    },
+    {
+      "bytes": "000f4240",
+      "code": "000000"
+    },
+    {
+      "bytes": "ffffffff",
+      "code": "967295"
+    },
+    {
+      "bytes": "12345678",
+      "code": "419896"
+    }
+  ],
+  "pairingUris": {
+    "valid": [
+      "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com"
+    ],
+    "invalid": [
+      "zunia://connect?v=1&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com",
+      "zunia://connect?v=2&sid=short&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com",
+      "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=https%3A%2F%2Fapi.zunialab.com",
+      "zunia://wc?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com"
+    ]
+  }
+}

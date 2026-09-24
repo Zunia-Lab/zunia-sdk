@@ -133,7 +133,8 @@ export function createConnectWithZuniaButton(
   button.disabled = Boolean(options.disabled);
   const label = options.label ?? ZUNIA_CONNECT_BUTTON.label;
   button.setAttribute("aria-label", label);
-  button.innerHTML = `<span class="zunia-connect-btn__mark">${ZUNIA_MARK_SVG}</span><span>${label}</span>`;
+  button.innerHTML = `<span class="zunia-connect-btn__mark">${ZUNIA_MARK_SVG}</span><span></span>`;
+  button.lastElementChild!.textContent = label;
   button.addEventListener("click", defaultClick(installed, options.onClick));
   return button;
 }

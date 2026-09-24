@@ -1,836 +1,428 @@
 import {
-  ZuniaConnectError,
   ZUNIA_CONNECT_BUTTON,
-  ZUNIA_NATIVE_CONNECT,
-  accountsFromKey,
-  createEnvelope,
+  ZuniaConnectError,
+  buildSignInMessage,
+  keyFromAccount,
   normalizeChainIds,
-  type ConnectOptions,
-  type CreateConnectSessionRequest,
-  type CreateConnectSessionResponse,
-  type ZuniaConnectEnvelope,
+  toZuniaConnectError,
+  type AccountData,
+  type AminoSignResponse,
+  type DirectSignResponse,
+  type SignDocInput,
+  type SignInOptions,
+  type SignInResult,
+  type StdSignDoc,
+  type StdSignature,
+  type ZuniaAccountInfo,
   type ZuniaKey,
   type ZuniaOfflineSigner,
+  type ZuniaPairing,
   type ZuniaSession,
-  type ZuniaSessionAccount,
   type ZuniaSessionEvents,
   type ZuniaSessionStatus,
   type ZuniaTransport,
   type ZuniaTransportKind,
 } from "@zunialab/sdk-core";
-import { enableZunia, getZunia, isZuniaInstalled } from "./detect.js";
+import { getZunia } from "./detect.js";
+import { EventBus } from "./events.js";
+import { STORAGE_KEYS, readJson, removeKey, resolveStorage, writeJson } from "./storage.js";
+import { ExtensionTransport, type ExtensionTransportOptions } from "./transports/extension.js";
+import { NativeWsTransport, type NativeWsTransportOptions } from "./transports/native-ws.js";
+import {
+  WalletConnectTransport,
+  type ZuniaWebConnectOptions,
+  type ZuniaWebRestoreOptions,
+} from "./transports/walletconnect.js";
 
-type ListenerMap = {
-  [K in keyof ZuniaSessionEvents]?: Set<ZuniaSessionEvents[K]>;
-};
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
+export interface ZuniaSessionOptions {
+  extension?: ExtensionTransportOptions;
+  nativeWs?: NativeWsTransportOptions;
+  walletConnect?: { loadSignClient?: () => Promise<unknown> };
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+/** Everything a UI shows, as one immutable object that changes identity on every update. */
+export interface ZuniaSessionSnapshot {
+  readonly status: ZuniaSessionStatus;
+  readonly transport: ZuniaTransportKind | null;
+  readonly accounts: readonly ZuniaAccountInfo[];
+  readonly chains: readonly string[];
+  readonly pairing: ZuniaPairing | undefined;
+  readonly verificationCode: string | undefined;
+  readonly error: ZuniaConnectError | undefined;
 }
 
-function dataToString(data: string | Uint8Array): string {
-  if (typeof data === "string") return data;
-  return new TextDecoder().decode(data);
+const KINDS: readonly ZuniaTransportKind[] = ["extension", "native-ws", "walletconnect"];
+const SIGN_IN_TTL_MS = 10 * 60_000;
+
+function isoOrUndefined(value: string | Date | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value instanceof Date ? value.toISOString() : value;
 }
 
-class EventBus {
-  private listeners: ListenerMap = {};
-
-  on<K extends keyof ZuniaSessionEvents>(
-    event: K,
-    listener: ZuniaSessionEvents[K],
-  ): void {
-    if (!this.listeners[event]) this.listeners[event] = new Set() as never;
-    (this.listeners[event] as Set<ZuniaSessionEvents[K]>).add(listener);
-  }
-
-  off<K extends keyof ZuniaSessionEvents>(
-    event: K,
-    listener: ZuniaSessionEvents[K],
-  ): void {
-    this.listeners[event]?.delete(listener as never);
-  }
-
-  emit<K extends keyof ZuniaSessionEvents>(
-    event: K,
-    ...args: Parameters<ZuniaSessionEvents[K]>
-  ): void {
-    const set = this.listeners[event];
-    if (!set) return;
-    for (const listener of set) {
-      (listener as (...a: unknown[]) => void)(...args);
-    }
-  }
-}
-
-export class ExtensionTransport implements ZuniaTransport {
-  readonly kind = "extension" as const;
-  private bus = new EventBus();
-  private accounts: ZuniaSessionAccount[] = [];
-  private chains: string[] = [];
-
-  on = this.bus.on.bind(this.bus);
-  off = this.bus.off.bind(this.bus);
-
-  async connect(options: ConnectOptions): Promise<void> {
-    this.bus.emit("status", "connecting");
-    const chains = normalizeChainIds(options.chains);
-    const provider = await enableZunia(chains, {
-      timeoutMs: options.timeoutMs,
-    });
-    this.chains = chains;
-    this.accounts = [];
-    for (const chainId of chains) {
-      const key = await provider.getKey(chainId);
-      this.accounts.push(accountsFromKey(chainId, key));
-    }
-    this.bus.emit("accountsChanged", this.accounts);
-    this.bus.emit("status", "connected");
-  }
-
-  async disconnect(): Promise<void> {
-    const provider = await getZunia({ timeoutMs: 500 });
-    if (provider?.disable) {
-      await provider.disable(this.chains);
-    }
-    this.accounts = [];
-    this.bus.emit("status", "disconnected");
-    this.bus.emit("disconnect", "user");
-  }
-
-  async getAccounts(): Promise<ZuniaSessionAccount[]> {
-    return this.accounts;
-  }
-
-  async getKey(chainId: string): Promise<ZuniaKey> {
-    const provider = await getZunia({ timeoutMs: 1_000 });
-    if (!provider) throw new ZuniaConnectError("NOT_INSTALLED", "Extension missing");
-    return provider.getKey(chainId);
-  }
-
-  getOfflineSigner(chainId: string): ZuniaOfflineSigner {
-    return {
-      getAccounts: async () =>
-        this.accounts
-          .filter((a) => a.chainId === chainId)
-          .map((a) => ({
-            address: a.address,
-            algo: a.algo,
-            pubkey: base64ToBytes(a.pubkey),
-          })),
-      signAmino: async (signer, signDoc) =>
-        this.signAmino(chainId, String(signer), signDoc),
-      signDirect: async (signer, signDoc) =>
-        this.signDirect(chainId, String(signer), signDoc as never),
-    };
-  }
-
-  async signAmino(chainId: string, signer: string, signDoc: unknown) {
-    const provider = await getZunia({ timeoutMs: 1_000 });
-    if (!provider?.signAmino) {
-      throw new ZuniaConnectError("UNSUPPORTED", "signAmino unavailable");
-    }
-    this.bus.emit("status", "signing");
-    try {
-      return await provider.signAmino(chainId, signer, signDoc);
-    } finally {
-      this.bus.emit("status", "connected");
-    }
-  }
-
-  async signDirect(
-    chainId: string,
-    signer: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array },
-  ) {
-    const provider = await getZunia({ timeoutMs: 1_000 });
-    if (!provider?.signDirect) {
-      throw new ZuniaConnectError("UNSUPPORTED", "signDirect unavailable");
-    }
-    this.bus.emit("status", "signing");
-    try {
-      return await provider.signDirect(chainId, signer, signDoc);
-    } finally {
-      this.bus.emit("status", "connected");
-    }
-  }
-
-  async signArbitrary(
-    chainId: string,
-    signer: string,
-    data: string | Uint8Array,
-  ) {
-    const provider = await getZunia({ timeoutMs: 1_000 });
-    if (!provider?.signArbitrary) {
-      throw new ZuniaConnectError("UNSUPPORTED", "signArbitrary unavailable");
-    }
-    return provider.signArbitrary(chainId, signer, data);
-  }
-}
-
-export class NativeWsTransport implements ZuniaTransport {
-  readonly kind = "native-ws" as const;
-  private bus = new EventBus();
-  private ws: WebSocket | null = null;
-  private accounts: ZuniaSessionAccount[] = [];
-  private chains: string[] = [];
-  private pairing?: CreateConnectSessionResponse;
-  private pending = new Map<
-    string,
-    { resolve: (v: unknown) => void; reject: (e: Error) => void }
-  >();
-
-  on = this.bus.on.bind(this.bus);
-  off = this.bus.off.bind(this.bus);
-
-  get pairingInfo(): CreateConnectSessionResponse | undefined {
-    return this.pairing;
-  }
-
-  async connect(options: ConnectOptions): Promise<void> {
-    this.bus.emit("status", "connecting");
-    const chains = normalizeChainIds(options.chains);
-    this.chains = chains;
-    const apiBase = (options.apiBase ?? "").replace(/\/$/, "");
-    if (!apiBase) {
-      throw new ZuniaConnectError(
-        "NETWORK",
-        "apiBase is required for native-ws (e.g. http://localhost:8788)",
-      );
-    }
-
-    const metadata = options.metadata ?? {
-      name: typeof document !== "undefined" ? document.title || "dApp" : "dApp",
-      url: typeof location !== "undefined" ? location.origin : "https://localhost",
-    };
-
-    const body: CreateConnectSessionRequest = {
-      metadata,
-      chains,
-      methods: [...ZUNIA_NATIVE_CONNECT.defaultMethods],
-      events: [...ZUNIA_NATIVE_CONNECT.defaultEvents],
-    };
-
-    const res = await fetch(`${apiBase}${ZUNIA_NATIVE_CONNECT.httpPath}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      throw new ZuniaConnectError(
-        "NETWORK",
-        `Failed to create connect session (${res.status})`,
-      );
-    }
-    this.pairing = (await res.json()) as CreateConnectSessionResponse;
-    this.bus.emit("pairing", this.pairing);
-    this.bus.emit("status", "awaiting_wallet");
-
-    const wsUrl = new URL(this.pairing.wsUrl);
-    wsUrl.searchParams.set("role", "dapp");
-    if (options.wsBase) {
-      const base = new URL(options.wsBase);
-      wsUrl.protocol = base.protocol;
-      wsUrl.host = base.host;
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        reject(
-          new ZuniaConnectError("TIMEOUT", "Wallet did not approve in time"),
-        );
-      }, options.timeoutMs ?? 120_000);
-
-      this.ws = new WebSocket(wsUrl.toString());
-      this.ws.onopen = () => {
-        this.ws?.send(
-          JSON.stringify(
-            createEnvelope("hello", { role: "dapp", metadata }),
-          ),
-        );
-        this.ws?.send(
-          JSON.stringify(
-            createEnvelope("connect_request", {
-              origin: metadata.url,
-              metadata,
-              chains,
-              methods: body.methods,
-              events: body.events,
-            }),
-          ),
-        );
-      };
-      this.ws.onerror = () => {
-        window.clearTimeout(timeout);
-        reject(new ZuniaConnectError("NETWORK", "WebSocket connection failed"));
-      };
-      this.ws.onmessage = (ev) => {
-        let msg: ZuniaConnectEnvelope;
-        try {
-          msg = JSON.parse(String(ev.data)) as ZuniaConnectEnvelope;
-        } catch {
-          return;
-        }
-        if (msg.type === "connect_approve") {
-          const payload = msg.payload as {
-            accounts: ZuniaSessionAccount[];
-            chains: string[];
-          };
-          this.accounts = payload.accounts;
-          this.chains = payload.chains ?? chains;
-          window.clearTimeout(timeout);
-          this.bus.emit("accountsChanged", this.accounts);
-          this.bus.emit("status", "connected");
-          resolve();
-          return;
-        }
-        if (msg.type === "connect_reject") {
-          window.clearTimeout(timeout);
-          reject(
-            new ZuniaConnectError(
-              "USER_REJECTED",
-              (msg.payload as { reason?: string })?.reason ?? "Rejected",
-            ),
-          );
-          return;
-        }
-        if (msg.type === "event_accounts_changed") {
-          this.accounts = msg.payload as ZuniaSessionAccount[];
-          this.bus.emit("accountsChanged", this.accounts);
-        }
-        if (msg.type === "event_chain_changed") {
-          this.chains = msg.payload as string[];
-          this.bus.emit("chainChanged", this.chains);
-        }
-        if (msg.type === "sign_result" || msg.type === "sign_reject") {
-          const waiter = msg.id ? this.pending.get(msg.id) : undefined;
-          if (waiter) {
-            this.pending.delete(msg.id!);
-            if (msg.type === "sign_reject") {
-              waiter.reject(
-                new ZuniaConnectError(
-                  "USER_REJECTED",
-                  (msg.payload as { reason?: string })?.reason ?? "Rejected",
-                ),
-              );
-            } else {
-              waiter.resolve(msg.payload);
-            }
-          }
-        }
-        if (msg.type === "disconnect") {
-          this.bus.emit("disconnect", (msg.payload as { reason?: string })?.reason);
-          this.bus.emit("status", "disconnected");
-        }
-      };
-    });
-  }
-
-  async disconnect(reason?: string): Promise<void> {
-    this.ws?.send(
-      JSON.stringify(createEnvelope("disconnect", { reason: reason ?? "user" })),
-    );
-    this.ws?.close();
-    this.ws = null;
-    if (this.pairing && this.pairing.httpUrl) {
-      try {
-        await fetch(this.pairing.httpUrl, { method: "DELETE" });
-      } catch {
-        /* ignore */
-      }
-    }
-    this.bus.emit("status", "disconnected");
-  }
-
-  async getAccounts(): Promise<ZuniaSessionAccount[]> {
-    return this.accounts;
-  }
-
-  async getKey(chainId: string): Promise<ZuniaKey> {
-    const account = this.accounts.find((a) => a.chainId === chainId);
-    if (!account) throw new ZuniaConnectError("UNAUTHORIZED", "No account");
-    return {
-      name: account.name ?? "Zunia",
-      algo: account.algo,
-      pubKey: base64ToBytes(account.pubkey),
-      address: account.address,
-      bech32Address: account.bech32Address ?? account.address,
-    };
-  }
-
-  getOfflineSigner(chainId: string): ZuniaOfflineSigner {
-    return {
-      getAccounts: async () =>
-        this.accounts
-          .filter((a) => a.chainId === chainId)
-          .map((a) => ({
-            address: a.address,
-            algo: a.algo,
-            pubkey: base64ToBytes(a.pubkey),
-          })),
-      signAmino: (signer, signDoc) =>
-        this.signAmino(chainId, String(signer), signDoc),
-      signDirect: (signer, signDoc) =>
-        this.signDirect(chainId, String(signer), signDoc as never),
-    };
-  }
-
-  private request<T>(
-    type: "sign_amino" | "sign_direct" | "sign_arbitrary",
-    payload: unknown,
-  ): Promise<T> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(
-        new ZuniaConnectError("DISCONNECTED", "Native WS not connected"),
-      );
-    }
-    const id = crypto.randomUUID();
-    this.bus.emit("status", "signing");
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: (v) => {
-          this.bus.emit("status", "connected");
-          resolve(v as T);
-        },
-        reject: (e) => {
-          this.bus.emit("status", "connected");
-          reject(e);
-        },
-      });
-      this.ws!.send(JSON.stringify(createEnvelope(type, payload, id)));
-    });
-  }
-
-  signAmino(chainId: string, signer: string, signDoc: unknown) {
-    return this.request("sign_amino", { chainId, signer, signDoc });
-  }
-
-  signDirect(
-    chainId: string,
-    signer: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array },
-  ) {
-    return this.request("sign_direct", {
-      chainId,
-      signer,
-      bodyBytes: bytesToBase64(signDoc.bodyBytes),
-      authInfoBytes: bytesToBase64(signDoc.authInfoBytes),
-    });
-  }
-
-  signArbitrary(chainId: string, signer: string, data: string | Uint8Array) {
-    const encoding = typeof data === "string" ? "utf8" : "base64";
-    const encoded =
-      typeof data === "string" ? data : bytesToBase64(data);
-    return this.request("sign_arbitrary", {
-      chainId,
-      signer,
-      data: encoded,
-      encoding,
-    });
-  }
-}
-
-/** WalletConnect SignClient transport (browser). Requires projectId. */
-export class WalletConnectTransport implements ZuniaTransport {
-  readonly kind = "walletconnect" as const;
-  private bus = new EventBus();
-  private accounts: ZuniaSessionAccount[] = [];
-  private chains: string[] = [];
-  private pairing?: CreateConnectSessionResponse;
-  private sessionTopic: string | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private client: any = null;
-
-  on = this.bus.on.bind(this.bus);
-  off = this.bus.off.bind(this.bus);
-
-  get pairingInfo(): CreateConnectSessionResponse | undefined {
-    return this.pairing;
-  }
-
-  async connect(options: ConnectOptions): Promise<void> {
-    const projectId = options.walletConnectProjectId;
-    if (!projectId) {
-      throw new ZuniaConnectError(
-        "NETWORK",
-        "walletConnectProjectId is required for WalletConnect",
-      );
-    }
-    this.bus.emit("status", "connecting");
-    this.chains = normalizeChainIds(options.chains);
-
-    try {
-      const { SignClient } = await import("@walletconnect/sign-client");
-      this.client = await SignClient.init({
-        projectId,
-        metadata: {
-          name: options.metadata?.name ?? "Zunia dApp",
-          description: options.metadata?.description ?? "",
-          url: options.metadata?.url ?? "https://zunialab.com",
-          icons: options.metadata?.icons ?? [],
-        },
-      });
-    } catch (e) {
-      throw new ZuniaConnectError(
-        "UNSUPPORTED",
-        "Install @walletconnect/sign-client to use WalletConnect transport",
-        e,
-      );
-    }
-
-    const namespaces = {
-      cosmos: {
-        methods: [
-          "cosmos_getAccounts",
-          "cosmos_signAmino",
-          "cosmos_signDirect",
-          "cosmos_signArbitrary",
-        ],
-        chains: this.chains.map((id) => `cosmos:${id}`),
-        events: ["accountsChanged", "chainChanged"],
-      },
-    };
-
-    const { uri, approval } = await this.client.connect({
-      requiredNamespaces: namespaces,
-    });
-
-    if (uri) {
-      this.pairing = {
-        sessionId: uri.slice(0, 32),
-        pairingSecret: "",
-        expiresAt: Date.now() + 900_000,
-        wsUrl: "",
-        deepLink: `zunia://wc?uri=${encodeURIComponent(uri)}`,
-        qrPayload: uri,
-        httpUrl: "",
-      };
-      this.bus.emit("pairing", this.pairing);
-      this.bus.emit("status", "awaiting_wallet");
-    }
-
-    const session = await approval();
-    this.sessionTopic = session.topic;
-    const accounts =
-      session.namespaces?.cosmos?.accounts?.map((a: string) => {
-        const parts = a.split(":");
-        const chainId = parts[1] ?? "";
-        const address = parts[2] ?? "";
-        return {
-          chainId,
-          address,
-          algo: "secp256k1",
-          pubkey: "",
-        } satisfies ZuniaSessionAccount;
-      }) ?? [];
-    this.accounts = accounts;
-    this.bus.emit("accountsChanged", this.accounts);
-    this.bus.emit("status", "connected");
-  }
-
-  async disconnect(): Promise<void> {
-    if (this.client && this.sessionTopic) {
-      await this.client.disconnect({
-        topic: this.sessionTopic,
-        reason: { code: 6000, message: "User disconnected" },
-      });
-    }
-    this.sessionTopic = null;
-    this.bus.emit("status", "disconnected");
-  }
-
-  async getAccounts(): Promise<ZuniaSessionAccount[]> {
-    return this.accounts;
-  }
-
-  async getKey(chainId: string): Promise<ZuniaKey> {
-    const account = this.accounts.find((a) => a.chainId === chainId);
-    if (!account) throw new ZuniaConnectError("UNAUTHORIZED", "No account");
-    return {
-      name: "Zunia",
-      algo: account.algo,
-      pubKey: account.pubkey ? base64ToBytes(account.pubkey) : new Uint8Array(),
-      address: account.address,
-      bech32Address: account.address,
-    };
-  }
-
-  getOfflineSigner(chainId: string): ZuniaOfflineSigner {
-    return {
-      getAccounts: async () =>
-        this.accounts
-          .filter((a) => a.chainId === chainId)
-          .map((a) => ({
-            address: a.address,
-            algo: a.algo,
-            pubkey: a.pubkey ? base64ToBytes(a.pubkey) : new Uint8Array(),
-          })),
-      signAmino: (signer, signDoc) =>
-        this.signAmino(chainId, String(signer), signDoc),
-      signDirect: (signer, signDoc) =>
-        this.signDirect(chainId, String(signer), signDoc as never),
-    };
-  }
-
-  async signAmino(chainId: string, signer: string, signDoc: unknown) {
-    if (!this.client || !this.sessionTopic) {
-      throw new ZuniaConnectError("DISCONNECTED", "No WC session");
-    }
-    this.bus.emit("status", "signing");
-    try {
-      return await this.client.request({
-        topic: this.sessionTopic,
-        chainId: `cosmos:${chainId}`,
-        request: {
-          method: "cosmos_signAmino",
-          params: { signerAddress: signer, signDoc },
-        },
-      });
-    } finally {
-      this.bus.emit("status", "connected");
-    }
-  }
-
-  async signDirect(
-    chainId: string,
-    signer: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array },
-  ) {
-    if (!this.client || !this.sessionTopic) {
-      throw new ZuniaConnectError("DISCONNECTED", "No WC session");
-    }
-    this.bus.emit("status", "signing");
-    try {
-      return await this.client.request({
-        topic: this.sessionTopic,
-        chainId: `cosmos:${chainId}`,
-        request: {
-          method: "cosmos_signDirect",
-          params: {
-            signerAddress: signer,
-            signDoc: {
-              bodyBytes: bytesToBase64(signDoc.bodyBytes),
-              authInfoBytes: bytesToBase64(signDoc.authInfoBytes),
-            },
-          },
-        },
-      });
-    } finally {
-      this.bus.emit("status", "connected");
-    }
-  }
-
-  async signArbitrary(
-    chainId: string,
-    signer: string,
-    data: string | Uint8Array,
-  ) {
-    if (!this.client || !this.sessionTopic) {
-      throw new ZuniaConnectError("DISCONNECTED", "No WC session");
-    }
-    return this.client.request({
-      topic: this.sessionTopic,
-      chainId: `cosmos:${chainId}`,
-      request: {
-        method: "cosmos_signArbitrary",
-        params: { signerAddress: signer, data: dataToString(data) },
-      },
-    });
-  }
-}
-
+/**
+ * One connection to a Zunia wallet, whatever carries it: the extension, a
+ * phone paired by QR code, or WalletConnect. Results have the same shape on
+ * every transport.
+ */
 export class ZuniaSessionImpl implements ZuniaSession {
-  private transportImpl: ZuniaTransport | null = null;
-  private bus = new EventBus();
-  private _status: ZuniaSessionStatus = "idle";
-  private _accounts: ZuniaSessionAccount[] = [];
-  private _chains: string[] = [];
-  private _pairing?: CreateConnectSessionResponse;
+  private active: ZuniaTransport | null = null;
+  private unwire: (() => void) | null = null;
+  private restoring: Promise<boolean> | null = null;
+  private readonly bus = new EventBus<ZuniaSessionEvents>();
+  private readonly listeners = new Set<() => void>();
+  private snapshot: ZuniaSessionSnapshot = {
+    status: "idle",
+    transport: null,
+    accounts: [],
+    chains: [],
+    pairing: undefined,
+    verificationCode: undefined,
+    error: undefined,
+  };
 
-  get transport(): ZuniaTransportKind {
-    return this.transportImpl?.kind ?? "extension";
+  constructor(private readonly options: ZuniaSessionOptions = {}) {}
+
+  get transport(): ZuniaTransportKind | null {
+    return this.snapshot.transport;
   }
+
   get status(): ZuniaSessionStatus {
-    return this._status;
+    return this.snapshot.status;
   }
-  get accounts(): ZuniaSessionAccount[] {
-    return this._accounts;
+
+  get accounts(): ZuniaAccountInfo[] {
+    return [...this.snapshot.accounts];
   }
+
   get chains(): string[] {
-    return this._chains;
-  }
-  get pairing(): CreateConnectSessionResponse | undefined {
-    return this._pairing;
+    return [...this.snapshot.chains];
   }
 
-  on = this.bus.on.bind(this.bus);
-  off = this.bus.off.bind(this.bus);
-
-  private wire(t: ZuniaTransport): void {
-    this.transportImpl = t;
-    t.on?.("status", (s) => {
-      this._status = s;
-      this.bus.emit("status", s);
-    });
-    t.on?.("accountsChanged", (a) => {
-      this._accounts = a;
-      this.bus.emit("accountsChanged", a);
-    });
-    t.on?.("chainChanged", (c) => {
-      this._chains = c;
-      this.bus.emit("chainChanged", c);
-    });
-    t.on?.("pairing", (p) => {
-      this._pairing = p;
-      this.bus.emit("pairing", p);
-    });
-    t.on?.("error", (e) => this.bus.emit("error", e));
-    t.on?.("disconnect", (r) => this.bus.emit("disconnect", r));
+  get pairing(): ZuniaPairing | undefined {
+    return this.snapshot.pairing;
   }
 
-  async connect(options: ConnectOptions): Promise<void> {
-    const prefer = options.prefer ?? "auto";
-    let transport: ZuniaTransport;
+  get verificationCode(): string | undefined {
+    return this.snapshot.verificationCode;
+  }
 
-    if (prefer === "extension" || (prefer === "auto" && isZuniaInstalled())) {
-      transport = new ExtensionTransport();
-    } else if (prefer === "native-ws" || (prefer === "auto" && options.apiBase)) {
-      transport = new NativeWsTransport();
-    } else if (
-      prefer === "walletconnect" ||
-      (prefer === "auto" && options.walletConnectProjectId)
-    ) {
-      transport = new WalletConnectTransport();
-    } else if (prefer === "auto") {
-      if (isZuniaInstalled()) transport = new ExtensionTransport();
-      else if (options.apiBase) transport = new NativeWsTransport();
-      else if (options.walletConnectProjectId)
-        transport = new WalletConnectTransport();
-      else {
-        if (options.openInstallIfMissing !== false) {
-          window.open(ZUNIA_CONNECT_BUTTON.installUrl, "_blank");
-        }
-        throw new ZuniaConnectError(
-          "NOT_INSTALLED",
-          "No Zunia extension, apiBase, or WalletConnect project id",
-        );
+  on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void {
+    this.bus.on(event, listener);
+  }
+
+  off<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void {
+    this.bus.off(event, listener);
+  }
+
+  /** For `useSyncExternalStore` and other stores: called after every change. */
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  readonly getSnapshot = (): ZuniaSessionSnapshot => this.snapshot;
+
+  async connect(options: ZuniaWebConnectOptions): Promise<void> {
+    if (normalizeChainIds(options.chains).length === 0) {
+      throw new ZuniaConnectError("INVALID_PARAMS", "Pass at least one chain id");
+    }
+    await this.drop();
+    this.update({ error: undefined, pairing: undefined, verificationCode: undefined });
+    let kind: ZuniaTransportKind;
+    try {
+      kind = await this.pick(options);
+    } catch (error) {
+      const failure = toZuniaConnectError(error);
+      this.update({ error: failure });
+      this.bus.emit("error", failure);
+      throw failure;
+    }
+    const transport = this.create(kind);
+    this.attach(transport);
+    try {
+      await transport.connect(options);
+    } catch (error) {
+      const failure = toZuniaConnectError(error);
+      this.detach();
+      this.update({ status: "disconnected", transport: null, accounts: [], chains: [], pairing: undefined, error: failure });
+      this.bus.emit("error", failure);
+      throw failure;
+    }
+    writeJson(resolveStorage(options.storage), STORAGE_KEYS.transport, { kind });
+  }
+
+  /** Reattaches to the last session without prompting. Resolves false when there is none. */
+  restore(options: ZuniaWebRestoreOptions = {}): Promise<boolean> {
+    if (this.restoring) return this.restoring;
+    const live = ["connected", "locked", "reconnecting"].includes(this.snapshot.status);
+    if (this.active && live) return Promise.resolve(true);
+    this.restoring = this.restoreNow(options).finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  private async restoreNow(options: ZuniaWebRestoreOptions): Promise<boolean> {
+    const storage = resolveStorage(options.storage);
+    const saved = (readJson(storage, STORAGE_KEYS.transport) as { kind?: unknown } | null)?.kind;
+    const first = KINDS.find((kind) => kind === saved);
+    const order = first ? [first, ...KINDS.filter((kind) => kind !== first)] : KINDS;
+    for (const kind of order) {
+      const transport = this.create(kind);
+      this.attach(transport);
+      let ok = false;
+      try {
+        ok = await transport.restore(options);
+      } catch {
+        ok = false;
       }
-    } else {
-      throw new ZuniaConnectError("UNSUPPORTED", `Unknown prefer=${prefer}`);
+      if (ok) {
+        writeJson(storage, STORAGE_KEYS.transport, { kind });
+        return true;
+      }
+      this.detach();
     }
-
-    this.wire(transport);
-    await transport.connect(options);
-    this._accounts = await transport.getAccounts();
-    this._chains = normalizeChainIds(options.chains);
-    this._status = "connected";
+    removeKey(storage, STORAGE_KEYS.transport);
+    this.update({ status: "idle", transport: null, accounts: [], chains: [] });
+    return false;
   }
 
-  async disconnect(reason?: string): Promise<void> {
-    await this.transportImpl?.disconnect(reason);
-    this._status = "disconnected";
+  async disconnect(reason = "user"): Promise<void> {
+    await this.drop(reason);
   }
 
-  async getAccounts(): Promise<ZuniaSessionAccount[]> {
-    return this.transportImpl?.getAccounts() ?? [];
+  getAccounts(): ZuniaAccountInfo[] {
+    return this.accounts;
   }
 
-  async getKey(chainId: string): Promise<ZuniaKey> {
-    if (!this.transportImpl) {
-      throw new ZuniaConnectError("DISCONNECTED", "No session");
-    }
-    return this.transportImpl.getKey(chainId);
+  /** Keplr-style key for `chainId`, from the accounts already shared. */
+  getKey(chainId: string): ZuniaKey {
+    const account = this.snapshot.accounts.find((item) => item.chainId === chainId);
+    if (!account) throw new ZuniaConnectError("NOT_CONNECTED", `No account on ${chainId}`);
+    return keyFromAccount(account);
   }
 
+  /** A CosmJS signer (Direct and Amino) for `SigningStargateClient`. */
   getOfflineSigner(chainId: string): ZuniaOfflineSigner {
-    if (!this.transportImpl) {
-      throw new ZuniaConnectError("DISCONNECTED", "No session");
-    }
-    return this.transportImpl.getOfflineSigner(chainId);
+    return {
+      getAccounts: async () => this.accountData(chainId),
+      signDirect: (signerAddress, signDoc) => this.signDirect(chainId, signerAddress, signDoc),
+      signAmino: (signerAddress, signDoc) => this.signAmino(chainId, signerAddress, signDoc),
+    };
   }
 
-  async enable(chainIds: string | string[]): Promise<void> {
-    await this.connect({ chains: chainIds, prefer: this.transport });
+  /** A CosmJS Amino-only signer, for chains or hardware that need Amino JSON. */
+  getOfflineSignerOnlyAmino(chainId: string): Pick<ZuniaOfflineSigner, "getAccounts" | "signAmino"> {
+    return {
+      getAccounts: async () => this.accountData(chainId),
+      signAmino: (signerAddress, signDoc) => this.signAmino(chainId, signerAddress, signDoc),
+    };
   }
 
-  signAmino(chainId: string, signer: string, signDoc: unknown) {
-    if (!this.transportImpl) {
-      return Promise.reject(new ZuniaConnectError("DISCONNECTED", "No session"));
-    }
-    return this.transportImpl.signAmino(chainId, signer, signDoc);
+  signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse> {
+    return this.run((transport) => transport.signAmino(chainId, signer, signDoc));
   }
 
-  signDirect(
-    chainId: string,
-    signer: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array },
-  ) {
-    if (!this.transportImpl) {
-      return Promise.reject(new ZuniaConnectError("DISCONNECTED", "No session"));
-    }
-    return this.transportImpl.signDirect(chainId, signer, signDoc);
+  signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse> {
+    return this.run((transport) => transport.signDirect(chainId, signer, signDoc));
   }
 
-  signArbitrary(chainId: string, signer: string, data: string | Uint8Array) {
-    if (!this.transportImpl?.signArbitrary) {
-      return Promise.reject(
-        new ZuniaConnectError("UNSUPPORTED", "signArbitrary unavailable"),
-      );
+  signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature> {
+    return this.run((transport) => transport.signArbitrary(chainId, signer, data));
+  }
+
+  /**
+   * Asks the wallet to sign a sign-in message for this site. Send the result
+   * to your server and check it there with `verifySignIn` from sdk-core.
+   */
+  async signIn(options: SignInOptions): Promise<SignInResult> {
+    const chainId = options.chainId ?? this.snapshot.chains[0];
+    const account = this.snapshot.accounts.find((item) => item.chainId === chainId);
+    if (!chainId || !account) throw new ZuniaConnectError("NOT_CONNECTED", "Connect a wallet before signing in");
+    const loc = typeof location === "undefined" ? undefined : location;
+    const domain = options.domain ?? loc?.host;
+    const uri = options.uri ?? loc?.origin;
+    if (!domain || !uri) throw new ZuniaConnectError("INVALID_PARAMS", "Pass domain and uri when not running in a page");
+    const issuedAt = new Date();
+    const message = buildSignInMessage({
+      domain,
+      address: account.address,
+      statement: options.statement,
+      uri,
+      chainId,
+      nonce: options.nonce,
+      issuedAt: issuedAt.toISOString(),
+      expirationTime: isoOrUndefined(options.expirationTime) ?? new Date(issuedAt.getTime() + SIGN_IN_TTL_MS).toISOString(),
+      notBefore: isoOrUndefined(options.notBefore),
+      requestId: options.requestId,
+      resources: options.resources,
+    });
+    const signature = await this.signArbitrary(chainId, account.address, message);
+    return { message, signature, address: account.address, chainId, pubKey: account.pubkey };
+  }
+
+  private accountData(chainId: string): AccountData[] {
+    return this.snapshot.accounts
+      .filter((account) => account.chainId === chainId)
+      .map(({ address, algo, pubkey }) => ({ address, algo, pubkey }));
+  }
+
+  private async run<T>(call: (transport: ZuniaTransport) => Promise<T>): Promise<T> {
+    const transport = this.active;
+    if (!transport || this.snapshot.status === "disconnected" || this.snapshot.status === "idle") {
+      throw new ZuniaConnectError("NOT_CONNECTED", "Connect a wallet first");
     }
-    return this.transportImpl.signArbitrary(chainId, signer, data);
+    try {
+      return await call(transport);
+    } catch (error) {
+      throw toZuniaConnectError(error);
+    }
+  }
+
+  private async pick(options: ZuniaWebConnectOptions): Promise<ZuniaTransportKind> {
+    const prefer = options.prefer ?? "auto";
+    if (prefer !== "auto") {
+      if (!KINDS.includes(prefer)) throw new ZuniaConnectError("INVALID_PARAMS", `Unknown transport ${String(prefer)}`);
+      return prefer;
+    }
+    if (this.options.extension?.provider || (await getZunia({ timeoutMs: 1_000 }))) return "extension";
+    if (options.apiBase) return "native-ws";
+    if (options.walletConnectProjectId && (options.loadWalletConnect || this.options.walletConnect?.loadSignClient)) {
+      return "walletconnect";
+    }
+    if (options.openInstallIfMissing !== false && typeof window !== "undefined") {
+      window.open(ZUNIA_CONNECT_BUTTON.installUrl, "_blank", "noopener,noreferrer");
+    }
+    throw new ZuniaConnectError(
+      "NOT_INSTALLED",
+      "The Zunia extension is not installed, and neither QR pairing (apiBase) nor WalletConnect is set up",
+    );
+  }
+
+  private create(kind: ZuniaTransportKind): ZuniaTransport {
+    if (kind === "extension") return new ExtensionTransport(this.options.extension);
+    if (kind === "native-ws") return new NativeWsTransport(this.options.nativeWs);
+    return new WalletConnectTransport(this.options.walletConnect);
+  }
+
+  private attach(transport: ZuniaTransport): void {
+    this.detach();
+    this.active = transport;
+    this.update({ transport: transport.kind });
+    const live = () => this.active === transport;
+    const handlers: { [K in keyof ZuniaSessionEvents]: ZuniaSessionEvents[K] } = {
+      status: (status) => {
+        if (!live()) return;
+        const settled = status === "connected" || status === "disconnected";
+        this.update({
+          status,
+          ...(settled ? { pairing: undefined } : {}),
+          ...(status === "disconnected" ? { verificationCode: undefined, accounts: [], chains: [] } : {}),
+        });
+        this.bus.emit("status", status);
+      },
+      accountsChanged: (accounts) => {
+        if (!live()) return;
+        this.update({ accounts });
+        this.bus.emit("accountsChanged", accounts);
+      },
+      chainChanged: (chains) => {
+        if (!live()) return;
+        this.update({ chains });
+        this.bus.emit("chainChanged", chains);
+      },
+      pairing: (pairing) => {
+        if (!live()) return;
+        this.update({ pairing });
+        this.bus.emit("pairing", pairing);
+      },
+      verification: (code) => {
+        if (!live()) return;
+        this.update({ verificationCode: code });
+        this.bus.emit("verification", code);
+      },
+      disconnect: (reason) => {
+        if (!live()) return;
+        this.update({ accounts: [], chains: [], pairing: undefined, verificationCode: undefined });
+        this.bus.emit("disconnect", reason);
+      },
+      error: (error) => {
+        if (!live()) return;
+        this.update({ error });
+        this.bus.emit("error", error);
+      },
+    };
+    for (const event of Object.keys(handlers) as Array<keyof ZuniaSessionEvents>) {
+      transport.on(event, handlers[event] as never);
+    }
+    this.unwire = () => {
+      for (const event of Object.keys(handlers) as Array<keyof ZuniaSessionEvents>) {
+        transport.off(event, handlers[event] as never);
+      }
+    };
+  }
+
+  private detach(): void {
+    this.unwire?.();
+    this.unwire = null;
+    this.active = null;
+  }
+
+  private async drop(reason?: string): Promise<void> {
+    const transport = this.active;
+    if (!transport) return;
+    try {
+      await transport.disconnect(reason);
+    } finally {
+      this.detach();
+      this.update({ status: "disconnected", transport: null, accounts: [], chains: [], pairing: undefined, verificationCode: undefined });
+    }
+  }
+
+  private update(patch: Partial<ZuniaSessionSnapshot>): void {
+    this.snapshot = { ...this.snapshot, ...patch };
+    for (const listener of [...this.listeners]) {
+      try {
+        listener();
+      } catch (error) {
+        setTimeout(() => {
+          throw error;
+        }, 0);
+      }
+    }
   }
 }
 
-export async function connectWithZunia(
-  options: ConnectOptions,
-): Promise<ZuniaSession> {
-  const session = new ZuniaSessionImpl();
+export function createZuniaSession(options?: ZuniaSessionOptions): ZuniaSessionImpl {
+  return new ZuniaSessionImpl(options);
+}
+
+/** Connects with the best available transport: the extension, then QR pairing, then WalletConnect. */
+export async function connectWithZunia(options: ZuniaWebConnectOptions, sessionOptions?: ZuniaSessionOptions): Promise<ZuniaSessionImpl> {
+  const session = new ZuniaSessionImpl(sessionOptions);
   await session.connect(options);
   return session;
 }
 
-export async function createExtensionSession(
-  options: ConnectOptions,
-): Promise<ZuniaSession> {
-  return connectWithZunia({ ...options, prefer: "extension" });
+/** The session from a previous visit, or null. Never prompts the user. */
+export async function restoreSession(
+  options?: ZuniaWebRestoreOptions,
+  sessionOptions?: ZuniaSessionOptions,
+): Promise<ZuniaSessionImpl | null> {
+  const session = new ZuniaSessionImpl(sessionOptions);
+  return (await session.restore(options)) ? session : null;
 }
 
-export async function createZuniaWsSession(
-  options: ConnectOptions,
-): Promise<ZuniaSession> {
-  return connectWithZunia({ ...options, prefer: "native-ws" });
+export function createExtensionSession(options: ZuniaWebConnectOptions, sessionOptions?: ZuniaSessionOptions): Promise<ZuniaSessionImpl> {
+  return connectWithZunia({ ...options, prefer: "extension" }, sessionOptions);
 }
 
-export async function createWalletConnectSession(
-  options: ConnectOptions,
-): Promise<ZuniaSession> {
-  return connectWithZunia({ ...options, prefer: "walletconnect" });
+export function createZuniaWsSession(options: ZuniaWebConnectOptions, sessionOptions?: ZuniaSessionOptions): Promise<ZuniaSessionImpl> {
+  return connectWithZunia({ ...options, prefer: "native-ws" }, sessionOptions);
 }
 
-export async function waitForZuniaInitialized(
-  timeoutMs = 5_000,
-): Promise<boolean> {
-  if (isZuniaInstalled()) return true;
-  if (typeof window === "undefined") return false;
-  return new Promise((resolve) => {
-    const timer = window.setTimeout(() => {
-      window.removeEventListener("zunia#initialized", onReady);
-      resolve(isZuniaInstalled());
-    }, timeoutMs);
-    function onReady() {
-      window.clearTimeout(timer);
-      resolve(true);
-    }
-    window.addEventListener("zunia#initialized", onReady, { once: true });
-  });
+export function createWalletConnectSession(options: ZuniaWebConnectOptions, sessionOptions?: ZuniaSessionOptions): Promise<ZuniaSessionImpl> {
+  return connectWithZunia({ ...options, prefer: "walletconnect" }, sessionOptions);
 }

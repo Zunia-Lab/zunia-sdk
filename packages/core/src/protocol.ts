@@ -1,46 +1,68 @@
-/** zunia.connect.v1 — native WebSocket session wire format. */
+/**
+ * zunia.connect.v2: pairing a dApp with the Zunia mobile wallet through a relay.
+ *
+ * Relay frames (`t` field) are the only thing the relay reads. Application
+ * messages travel sealed inside `msg` frames; see connect-crypto.ts.
+ */
+import type { ZuniaProviderErrorCode } from "./errors.js";
+import type { StdSignDoc, StdSignature } from "./types.js";
 
-export const ZUNIA_CONNECT_PROTOCOL_VERSION = "zunia.connect.v1" as const;
+export const ZUNIA_CONNECT_PROTOCOL = "zunia.connect.v2" as const;
+export const ZUNIA_CONNECT_TOKEN_PROTOCOL_PREFIX = "zunia.token.";
 
-export type ZuniaConnectRole = "dapp" | "wallet";
+export const ZUNIA_CONNECT_PATHS = {
+  sessions: "/v1/connect/sessions",
+  ws: "/v1/connect/ws",
+} as const;
 
-export type ZuniaConnectMessageType =
-  | "hello"
-  | "hello_ok"
-  | "connect_request"
-  | "connect_approve"
-  | "connect_reject"
-  | "accounts_get"
-  | "accounts"
-  | "sign_amino"
-  | "sign_direct"
-  | "sign_arbitrary"
-  | "sign_result"
-  | "sign_reject"
-  | "event_accounts_changed"
-  | "event_chain_changed"
-  | "ping"
-  | "pong"
-  | "disconnect"
-  | "error";
+/** WebSocket close codes the relay uses. */
+export const ZUNIA_CONNECT_CLOSE_CODES = {
+  replaced: 4000,
+  ended: 4001,
+  rateLimited: 4008,
+  unauthorized: 4401,
+} as const;
 
-export interface ZuniaConnectEnvelope<T = unknown> {
-  v: typeof ZUNIA_CONNECT_PROTOCOL_VERSION;
-  type: ZuniaConnectMessageType;
-  /** Correlation id for request/response pairs. */
-  id?: string;
-  ts: number;
-  payload: T;
+/** `POST /v1/connect/sessions`. Keep `dappToken` private; `walletJoinToken` goes in the QR code. */
+export interface CreateConnectSessionResponse {
+  v: typeof ZUNIA_CONNECT_PROTOCOL;
+  sessionId: string;
+  dappToken: string;
+  walletJoinToken: string;
+  verifiedOrigin: string | null;
+  expiresAt: number;
+  wsUrl: string;
 }
 
-export interface ZuniaConnectAccount {
-  chainId: string;
-  address: string;
-  algo: string;
-  /** Base64-encoded compressed pubkey. */
-  pubkey: string;
-  name?: string;
-}
+export type RelayErrorCode = "BAD_FRAME" | "FORBIDDEN" | "QUEUE_FULL";
+export type SessionEndReason = "closed" | "deleted" | "expired";
+
+export type RelayServerFrame =
+  | {
+      t: "welcome";
+      v: typeof ZUNIA_CONNECT_PROTOCOL;
+      role: "dapp" | "wallet";
+      sessionId: string;
+      verifiedOrigin: string | null;
+      paired: boolean;
+      peer: boolean;
+      expiresAt: number;
+      resumeToken?: string;
+    }
+  | { t: "peer"; online: boolean }
+  | { t: "hello"; pk: string }
+  | { t: "msg"; n: string; c: string }
+  | { t: "paired"; expiresAt: number }
+  | { t: "pong" }
+  | { t: "error"; code: RelayErrorCode; message: string }
+  | { t: "closed"; reason: SessionEndReason };
+
+export type RelayClientFrame =
+  | { t: "ping" }
+  | { t: "hello"; pk: string }
+  | { t: "msg"; n: string; c: string }
+  | { t: "paired" }
+  | { t: "close"; reason?: string };
 
 export interface ZuniaDappMetadata {
   name: string;
@@ -49,109 +71,117 @@ export interface ZuniaDappMetadata {
   icons?: string[];
 }
 
-export interface HelloPayload {
-  role: ZuniaConnectRole;
-  client?: string;
-  metadata?: ZuniaDappMetadata;
-}
-
-export interface HelloOkPayload {
-  role: ZuniaConnectRole;
-  peers: ZuniaConnectRole[];
-  expiresAt: number;
-}
-
-export interface ConnectRequestPayload {
-  origin: string;
-  metadata: ZuniaDappMetadata;
-  chains: string[];
-  methods: string[];
-  events: string[];
-}
-
-export interface ConnectApprovePayload {
-  accounts: ZuniaConnectAccount[];
-  chains: string[];
-  sessionExpiresAt: number;
-}
-
-export interface ConnectRejectPayload {
-  reason: string;
-}
-
-export interface SignAminoPayload {
+/** An account as it crosses the wire: the public key is base64. */
+export interface WireAccount {
   chainId: string;
-  signer: string;
-  signDoc: unknown;
+  address: string;
+  algo: string;
+  pubKey: string;
+  name?: string;
 }
 
-export interface SignDirectPayload {
-  chainId: string;
-  signer: string;
-  /** Base64 body bytes */
-  bodyBytes: string;
-  /** Base64 auth info bytes */
-  authInfoBytes: string;
-}
+/** Sealed application messages, dApp to wallet. */
+export type DappMessage =
+  | {
+      type: "connect_request";
+      id: string;
+      payload: {
+        metadata: ZuniaDappMetadata;
+        chains: string[];
+        methods: string[];
+        events: string[];
+      };
+    }
+  | { type: "get_accounts"; id: string; payload: { chainIds: string[] } }
+  | { type: "sign_amino"; id: string; payload: { chainId: string; signer: string; signDoc: StdSignDoc } }
+  | {
+      type: "sign_direct";
+      id: string;
+      payload: {
+        chainId: string;
+        signer: string;
+        signDoc: { bodyBytes: string; authInfoBytes: string; chainId: string; accountNumber: string };
+      };
+    }
+  | {
+      type: "sign_arbitrary";
+      id: string;
+      payload: { chainId: string; signer: string; data: string; encoding: "utf8" | "base64" };
+    };
 
-export interface SignArbitraryPayload {
-  chainId: string;
-  signer: string;
-  /** Base64 or utf-8 string data */
-  data: string;
-  encoding?: "base64" | "utf8";
-}
+/** Sealed application messages, wallet to dApp. */
+export type WalletMessage =
+  | {
+      type: "connect_approve";
+      id: string;
+      payload: { accounts: WireAccount[]; chains: string[]; wallet?: { name: string; version?: string } };
+    }
+  | { type: "connect_reject"; id: string; payload: { code: ZuniaProviderErrorCode; message: string } }
+  | { type: "result"; id: string; payload: unknown }
+  | { type: "error"; id: string; payload: { code: ZuniaProviderErrorCode; message: string } }
+  | { type: "accounts_changed"; payload: { accounts: WireAccount[] } }
+  | { type: "chains_changed"; payload: { chains: string[] } };
 
-export interface SignResultPayload {
-  signature: string;
-  pub_key?: { type: string; value: string };
-  signed?: unknown;
-}
-
-export interface SignRejectPayload {
-  reason: string;
-  code?: string;
-}
-
-export interface DisconnectPayload {
-  reason?: string;
-}
-
-export interface ErrorPayload {
-  code: string;
-  message: string;
-  id?: string;
-}
-
-export interface CreateConnectSessionRequest {
-  metadata: ZuniaDappMetadata;
-  chains: string[];
-  methods?: string[];
-  events?: string[];
-  /** Requested TTL seconds (clamped server-side). */
-  ttlSeconds?: number;
-}
-
-export interface CreateConnectSessionResponse {
-  sessionId: string;
-  pairingSecret: string;
-  expiresAt: number;
-  wsUrl: string;
-  deepLink: string;
-  qrPayload: string;
-  httpUrl: string;
-}
-
-export function createEnvelope<T>(
-  type: ZuniaConnectMessageType,
-  payload: T,
-  id?: string,
-): ZuniaConnectEnvelope<T> {
-  return {
-    v: ZUNIA_CONNECT_PROTOCOL_VERSION,
-    type,
-    id,
-    ts: Date.now(),
-    payload,
+/** Result payloads of wallet `result` messages, by request type. */
+export interface WireSignResults {
+  sign_amino: { signed: StdSignDoc; signature: StdSignature };
+  sign_direct: {
+    signed: { bodyBytes: string; authInfoBytes: string; chainId: string; accountNumber: string };
+    signature: StdSignature;
   };
+  sign_arbitrary: StdSignature;
+  get_accounts: WireAccount[];
+}
+
+export interface ZuniaPairingUri {
+  sessionId: string;
+  joinToken: string;
+  /** The dApp's X25519 public key, unpadded base64url. */
+  dappPublicKey: string;
+  /** Relay WebSocket base, e.g. `wss://api.zunialab.com`. Wallets only accept relays they trust. */
+  relay: string;
+}
+
+const SESSION_ID = /^[A-Za-z0-9_-]{22}$/;
+const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const PUBLIC_KEY = /^[A-Za-z0-9_-]{43}$/;
+
+/** `zunia://connect?v=2&sid=…&t=…&pk=…&r=…`, the QR code payload. */
+export function buildPairingUri(params: ZuniaPairingUri): string {
+  const query = new URLSearchParams({
+    v: "2",
+    sid: params.sessionId,
+    t: params.joinToken,
+    pk: params.dappPublicKey,
+    r: params.relay,
+  });
+  return `zunia://connect?${query.toString()}`;
+}
+
+/** Reads a v2 pairing URI (custom scheme or https link). Returns null for anything else. */
+export function parsePairingUri(uri: string): ZuniaPairingUri | null {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return null;
+  }
+  const isScheme = url.protocol === "zunia:" && (url.host === "connect" || url.pathname.replace(/^\/+/, "") === "connect");
+  const isLink = url.protocol === "https:" && url.pathname.replace(/\/$/, "") === "/connect";
+  if (!isScheme && !isLink) return null;
+  const q = url.searchParams;
+  const sessionId = q.get("sid") ?? "";
+  const joinToken = q.get("t") ?? "";
+  const dappPublicKey = q.get("pk") ?? "";
+  const relay = q.get("r") ?? "";
+  if (q.get("v") !== "2" || !SESSION_ID.test(sessionId) || !TOKEN.test(joinToken) || !PUBLIC_KEY.test(dappPublicKey)) {
+    return null;
+  }
+  try {
+    const relayUrl = new URL(relay);
+    if (relayUrl.protocol !== "wss:" && relayUrl.protocol !== "ws:") return null;
+  } catch {
+    return null;
+  }
+  return { sessionId, joinToken, dappPublicKey, relay };
 }

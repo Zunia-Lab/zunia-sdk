@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToBase64, utf8ToBytes } from "./encoding.js";
+import { ZuniaSignInError } from "./errors.js";
+import { buildSignInMessage } from "./sign-in.js";
+import type { StdSignature } from "./types.js";
+import {
+  adr36SignDoc,
+  pubkeyToAddress,
+  serializeAminoSignDoc,
+  verifyAdr36Signature,
+  verifySignIn,
+  type VerifySignInOptions,
+} from "./verify.js";
+
+const secretKey = sha256(utf8ToBytes("zunia sign-in test key"));
+const pubKey = secp256k1.getPublicKey(secretKey, true);
+const address = pubkeyToAddress(pubKey, "cosmos");
+const now = Date.parse("2026-09-24T10:01:00.000Z");
+
+function sign(text: string, key = secretKey, signer = address): StdSignature {
+  const digest = sha256(serializeAminoSignDoc(adr36SignDoc(signer, utf8ToBytes(text))));
+  const signature = secp256k1.sign(digest, key, { prehash: false });
+  return {
+    pub_key: { type: "tendermint/PubKeySecp256k1", value: bytesToBase64(secp256k1.getPublicKey(key, true)) },
+    signature: bytesToBase64(signature),
+  };
+}
+
+function message(overrides: Record<string, unknown> = {}): string {
+  return buildSignInMessage({
+    domain: "app.example.com",
+    address,
+    statement: "Sign in to Example.",
+    uri: "https://app.example.com/login",
+    chainId: "cosmoshub-4",
+    nonce: "a1b2c3d4e5f6a7b8",
+    issuedAt: "2026-09-24T10:00:00.000Z",
+    expirationTime: "2026-09-24T10:10:00.000Z",
+    ...overrides,
+  });
+}
+
+function options(text = message(), extra: Partial<VerifySignInOptions> = {}): VerifySignInOptions {
+  return { message: text, signature: sign(text), domain: "app.example.com", nonce: "a1b2c3d4e5f6a7b8", now, ...extra };
+}
+
+function refusal(opts: VerifySignInOptions): string {
+  try {
+    verifySignIn(opts);
+    return "ok";
+  } catch (error) {
+    assert.ok(error instanceof ZuniaSignInError, String(error));
+    return error.code;
+  }
+}
+
+describe("ADR-036", () => {
+  it("serializes the sign doc the way CosmJS does", () => {
+    const doc = adr36SignDoc("cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu", utf8ToBytes("hello"));
+    assert.equal(
+      new TextDecoder().decode(serializeAminoSignDoc(doc)),
+      '{"account_number":"0","chain_id":"","fee":{"amount":[],"gas":"0"},"memo":"","msgs":[{"type":"sign/MsgSignData","value":{"data":"aGVsbG8=","signer":"cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu"}}],"sequence":"0"}',
+    );
+    assert.equal(new TextDecoder().decode(serializeAminoSignDoc({ memo: "<a&b>" })), '{"memo":"\\u003ca\\u0026b\\u003e"}');
+  });
+
+  it("derives addresses from compressed keys", () => {
+    assert.match(address, /^cosmos1[02-9ac-hj-np-z]{38}$/);
+    assert.equal(pubkeyToAddress(pubKey, "osmo").startsWith("osmo1"), true);
+  });
+
+  it("verifies its own signatures and refuses high-S ones", () => {
+    const text = "plain message";
+    const digest = sha256(serializeAminoSignDoc(adr36SignDoc(address, utf8ToBytes(text))));
+    const low = secp256k1.sign(digest, secretKey, { prehash: false });
+    assert.equal(verifyAdr36Signature({ signer: address, data: text, pubKey, signature: low }), true);
+    const parsed = secp256k1.Signature.fromBytes(low);
+    const high = new secp256k1.Signature(parsed.r, secp256k1.Point.CURVE().n - parsed.s).toBytes();
+    assert.equal(verifyAdr36Signature({ signer: address, data: text, pubKey, signature: high }), false);
+  });
+});
+
+describe("verifySignIn", () => {
+  it("returns the proven address", () => {
+    const result = verifySignIn(options(message(), { chainId: ["cosmoshub-4", "osmosis-1"], address }));
+    assert.equal(result.address, address);
+    assert.equal(result.chainId, "cosmoshub-4");
+    assert.equal(result.domain, "app.example.com");
+    assert.deepEqual(result.pubKey, pubKey);
+  });
+
+  it("refuses each broken rule with its own code", () => {
+    const other = sha256(utf8ToBytes("another key"));
+    const otherAddress = pubkeyToAddress(secp256k1.getPublicKey(other, true), "cosmos");
+    const text = message();
+    const cases: Array<[string, VerifySignInOptions]> = [
+      ["INVALID_MESSAGE", { ...options(), message: "hello" }],
+      ["DOMAIN_MISMATCH", options(text, { domain: "evil.example" })],
+      ["URI_MISMATCH", options(message({ uri: "https://evil.example/login" }))],
+      ["NONCE_MISMATCH", options(text, { nonce: "0000000000000000" })],
+      ["CHAIN_MISMATCH", options(text, { chainId: "osmosis-1" })],
+      ["ADDRESS_MISMATCH", options(text, { address: otherAddress })],
+      ["ISSUED_IN_FUTURE", options(message({ issuedAt: "2026-09-24T10:30:00.000Z", expirationTime: undefined }))],
+      ["TOO_OLD", options(message({ issuedAt: "2026-09-24T09:00:00.000Z", expirationTime: undefined }))],
+      ["EXPIRED", options(text, { now: Date.parse("2026-09-24T10:10:00.000Z") })],
+      ["NOT_YET_VALID", options(message({ notBefore: "2026-09-24T10:09:00.000Z" }))],
+      [
+        "UNSUPPORTED_KEY",
+        { ...options(), signature: { ...sign(text), pub_key: { type: "ethermint/PubKeyEthSecp256k1", value: bytesToBase64(pubKey) } } },
+      ],
+      ["KEY_MISMATCH", { ...options(), signature: sign(text, other) }],
+      ["INVALID_SIGNATURE", { ...options(), signature: { ...sign(text), signature: sign(`${text} `).signature } }],
+    ];
+    for (const [code, opts] of cases) assert.equal(refusal(opts), code, code);
+  });
+
+  it("refuses a signature over another message", () => {
+    const signed = message();
+    const shown = message({ statement: "Something else." });
+    assert.equal(refusal({ ...options(shown), signature: sign(signed) }), "INVALID_SIGNATURE");
+  });
+});

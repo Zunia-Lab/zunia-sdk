@@ -37,24 +37,16 @@ export const ZUNIA_WALLETCONNECT = {
   cosmosEvents: ["accountsChanged", "chainChanged"] as const,
 } as const;
 
-/** First-party Zunia-native connect (HTTP + WebSocket broker). */
+/** First-party QR pairing through the Zunia relay (zunia.connect.v2). */
 export const ZUNIA_NATIVE_CONNECT = {
-  protocolVersion: "zunia.connect.v1",
+  protocolVersion: "zunia.connect.v2",
   httpPath: "/v1/connect/sessions",
   wsPath: "/v1/connect/ws",
-  /** Env for public WS base (ws:// in dev, wss:// in prod). */
-  wsPublicUrlEnv: "CONNECT_WS_PUBLIC_URL",
+  /** Env var apps commonly use for the relay base, e.g. `https://api.zunialab.com`. */
   apiBaseEnv: "ZUNIA_CONNECT_API_BASE",
-  defaultMethods: [
-    "enable",
-    "getKey",
-    "getAccounts",
-    "signAmino",
-    "signDirect",
-    "signArbitrary",
-  ] as const,
-  defaultEvents: ["accountsChanged", "chainChanged"] as const,
-  unpairedTtlSeconds: 900,
+  defaultMethods: ["get_accounts", "sign_amino", "sign_direct", "sign_arbitrary"] as const,
+  defaultEvents: ["accounts_changed", "chains_changed"] as const,
+  unpairedTtlSeconds: 600,
   pairedTtlSeconds: 86_400,
   deepLinkPath: "zunia://connect",
   universalPath: "https://zunialab.com/connect",
