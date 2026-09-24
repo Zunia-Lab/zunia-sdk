@@ -179,6 +179,17 @@ describe("ConnectCipher", () => {
     failsWith(() => elsewhere.open(dapp.seal({ type: "d" })), "PAIRING_FAILED");
   });
 
+  it("tells a resent copy apart from a forgery", () => {
+    const { dapp, wallet } = pair();
+    const frame = dapp.seal({ type: "a" });
+    assert.equal(wallet.openFresh(frame)?.type, "a");
+    assert.equal(wallet.openFresh(frame), null);
+    assert.deepEqual(wallet.state, { sendSeq: 0, receiveSeq: 1 });
+    const bytes = base64UrlToBytes(dapp.seal({ type: "b" }).c);
+    bytes[0] = (bytes[0] ?? 0) ^ 1;
+    failsWith(() => wallet.openFresh({ n: frame.n, c: bytesToBase64Url(bytes) }), "PAIRING_FAILED");
+  });
+
   it("resumes from saved sequence numbers", () => {
     const { dapp, wallet, fromDapp } = pair();
     wallet.open(dapp.seal({ type: "a" }));

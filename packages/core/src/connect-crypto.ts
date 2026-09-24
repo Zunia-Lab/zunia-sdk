@@ -178,6 +178,17 @@ export class ConnectCipher {
 
   /** Throws `PAIRING_FAILED` for a forged, tampered, replayed or reordered frame. */
   open(frame: SealedFrame): ConnectEnvelope {
+    const envelope = this.openFresh(frame);
+    if (!envelope) throw new ZuniaConnectError("PAIRING_FAILED", "A frame was replayed or reordered");
+    return envelope;
+  }
+
+  /**
+   * Like `open`, but returns null for an authentic frame that is not newer than
+   * the last one accepted: a copy the other side resent after a reconnect.
+   * Forged and tampered frames still throw.
+   */
+  openFresh(frame: SealedFrame): ConnectEnvelope | null {
     let envelope: unknown;
     try {
       const plaintext = decryptFrame(
@@ -199,9 +210,7 @@ export class ConnectCipher {
     ) {
       throw new ZuniaConnectError("PAIRING_FAILED", "A frame has no valid envelope");
     }
-    if ((candidate.seq as number) <= this.receiveSeq) {
-      throw new ZuniaConnectError("PAIRING_FAILED", "A frame was replayed or reordered");
-    }
+    if ((candidate.seq as number) <= this.receiveSeq) return null;
     this.receiveSeq = candidate.seq as number;
     return candidate as ConnectEnvelope;
   }

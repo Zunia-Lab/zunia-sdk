@@ -225,11 +225,12 @@ export class FakeWallet {
   /** Frames refused as replays or forgeries. Real wallets must drop these quietly too. */
   dropped = 0;
   readonly received: ConnectEnvelope[] = [];
+  readonly sent: Record<string, unknown>[] = [];
   respond: (message: ConnectEnvelope) => Record<string, unknown> | null = () => null;
 
   constructor(readonly accounts: WireAccount[]) {}
 
-  async pair(uri: string, approve = true): Promise<void> {
+  async pair(uri: string, approve = true, repeatHello = false): Promise<void> {
     const parsed = parsePairingUri(uri);
     if (!parsed) throw new Error("bad pairing uri");
     const own = generateConnectKeyPair();
@@ -243,6 +244,7 @@ export class FakeWallet {
     this.verificationCode = keys.verificationCode;
     await this.open(`${parsed.relay}/v1/connect/ws?sid=${parsed.sessionId}&role=wallet`, parsed.joinToken);
     this.send({ t: "hello", pk: bytesToBase64Url(own.publicKey) });
+    if (repeatHello) this.send({ t: "hello", pk: bytesToBase64Url(own.publicKey) });
     await waitFor(() => this.received.some((m) => m.type === "connect_request"), 3_000, "connect_request");
     const request = this.received.find((m) => m.type === "connect_request")!;
     const chains = (request.payload as { chains: string[] }).chains;
@@ -260,6 +262,7 @@ export class FakeWallet {
   }
 
   send(frame: Record<string, unknown>): void {
+    this.sent.push(frame);
     this.socket!.send(JSON.stringify(frame));
   }
 

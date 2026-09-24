@@ -27,7 +27,7 @@ function transport(): NativeWsTransport {
   return new NativeWsTransport({ reconnectMinMs: 20, reconnectMaxMs: 80, heartbeatMs: 1_000, deadAfterMs: 5_000, restoreWaitMs: 1_000 });
 }
 
-async function pair(options: { storage?: MemoryStorage; approve?: boolean; requestTimeoutMs?: number } = {}) {
+async function pair(options: { storage?: MemoryStorage; approve?: boolean; requestTimeoutMs?: number; repeatHello?: boolean } = {}) {
   const storage = options.storage ?? new MemoryStorage();
   const dapp = transport();
   const wallet = new FakeWallet([wireAccount(CHAIN, ADDRESS)]);
@@ -53,7 +53,7 @@ async function pair(options: { storage?: MemoryStorage; approve?: boolean; reque
   });
   connecting.catch(() => {});
   await waitFor(() => Boolean(pairing), 3_000, "pairing");
-  await wallet.pair(pairing!.uri, options.approve ?? true);
+  await wallet.pair(pairing!.uri, options.approve ?? true, options.repeatHello ?? false);
   return { dapp, wallet, storage, statuses, events, connecting, pairing: pairing!, code: () => code };
 }
 
@@ -176,6 +176,20 @@ describe("NativeWsTransport", () => {
     await assert.rejects(waiting, (error: unknown) => error instanceof ZuniaConnectError && error.code === "DISCONNECTED");
     assert.ok(events.includes("disconnect:closed"));
     assert.equal(storage.getItem(STORAGE_KEYS.nativeSession), null);
+  });
+
+  it("ignores what the wallet sends twice after a reconnect", async () => {
+    const { dapp, wallet, events, connecting } = await pair({ repeatHello: true });
+    await connecting;
+    assert.equal(wallet.received.filter((m) => m.type === "connect_request").length, 1);
+    answer(wallet, (message) => (message.type === "sign_arbitrary" ? { type: "result", id: message.id, payload: SIGNATURE } : null));
+    assert.deepEqual(await dapp.signArbitrary(CHAIN, ADDRESS, "once"), SIGNATURE);
+    const copy = wallet.sent.filter((frame) => frame.t === "msg").at(-1)!;
+    wallet.send(copy);
+    wallet.send(copy);
+    assert.deepEqual(await dapp.signArbitrary(CHAIN, ADDRESS, "again"), SIGNATURE);
+    assert.deepEqual(events.filter((event) => event.startsWith("error")), []);
+    await dapp.disconnect();
   });
 
   it("drops frames it cannot open without ending the session", async () => {

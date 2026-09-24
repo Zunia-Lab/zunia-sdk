@@ -213,6 +213,7 @@ export class NativeWsTransport implements ZuniaTransport {
   private requestTimeoutMs = DEFAULT_TIMEOUT_MS;
   private session: RelaySession | null = null;
   private keyPair: ConnectKeyPair | null = null;
+  private walletPublicKey: string | null = null;
   private keys: ConnectSessionKeys | null = null;
   private cipher: ConnectCipher | null = null;
   private accounts: ZuniaAccountInfo[] = [];
@@ -673,6 +674,8 @@ export class NativeWsTransport implements ZuniaTransport {
     const attempt = this.attempt;
     const session = this.session;
     if (this.phase !== "pairing" || !attempt || !session || !this.keyPair) return;
+    // The same wallet saying hello again after a reconnect: keep the keys and the request.
+    if (this.cipher && pk === this.walletPublicKey) return;
     try {
       this.keys = deriveConnectKeys({
         role: "dapp",
@@ -685,6 +688,7 @@ export class NativeWsTransport implements ZuniaTransport {
       return;
     }
     this.cipher = new ConnectCipher({ role: "dapp", sessionId: session.sessionId, keys: this.keys });
+    this.walletPublicKey = pk;
     this.code = this.keys.verificationCode;
     this.bus.emit("verification", this.code);
     this.settle(attempt.requestId);
@@ -702,14 +706,16 @@ export class NativeWsTransport implements ZuniaTransport {
 
   private onSealed(frame: { n: string; c: string }): void {
     if (!this.cipher) return;
-    let envelope: ConnectEnvelope;
+    let envelope: ConnectEnvelope | null;
     try {
-      envelope = this.cipher.open(frame);
+      envelope = this.cipher.openFresh(frame);
     } catch (error) {
       // Dropped, not fatal: only the relay could send it, and it can drop frames anyway.
       this.bus.emit("error", toZuniaConnectError(error, "PAIRING_FAILED"));
       return;
     }
+    // A frame the wallet resent after a reconnect, already handled.
+    if (!envelope) return;
     this.persist();
     try {
       this.onMessage(envelope);
@@ -908,6 +914,7 @@ export class NativeWsTransport implements ZuniaTransport {
     this.cipher = null;
     this.keys = null;
     this.keyPair = null;
+    this.walletPublicKey = null;
     this.accounts = [];
     this.chains = [];
     this.currentPairing = undefined;

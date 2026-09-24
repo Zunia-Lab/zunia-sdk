@@ -18,6 +18,7 @@ main {
   margin: 0 auto;
   padding: 2rem 1rem 4rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -173,4 +174,8 @@ input {
 
 .log time {
   color: var(--muted);
+}
+
+.log span {
+  overflow-wrap: anywhere;
 }
