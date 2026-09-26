@@ -10,7 +10,7 @@
 [![Website](https://img.shields.io/badge/website-zunialab.com-FF1B0C)](https://zunialab.com)
 [![Docs](https://img.shields.io/badge/docs-docs.zunialab.com-FF1B0C)](https://docs.zunialab.com)
 
-**Status:** 0.1.0, the first release, is being prepared. Until it is on npm, build the packages from this repository (see [Development](#development)).
+**Status:** 0.1.0 is on npm: `@zunialab/sdk-core`, `@zunialab/sdk-web`, `@zunialab/sdk-react` and `@zunialab/interchain`.
 
 ## Packages
 
