@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ZuniaTransportKind } from "@zunialab/sdk-core";
 import { ConnectPairingModal, useZuniaSession } from "@zunialab/sdk-react";
+import { AminoPanel, MessagePanel, SuggestChainPanel } from "./Approvals";
 import { CHAIN, METADATA, RELAY_API, SESSION_OPTIONS, WALLETCONNECT_PROJECT_ID } from "./config";
 import { EventLog } from "./EventLog";
 import { SendPanel } from "./SendPanel";
@@ -21,10 +22,24 @@ export function App() {
   const zunia = useZuniaSession({ restore: SESSION_OPTIONS });
   const log = useEventLog(zunia.session);
   const [pairingOpen, setPairingOpen] = useState(false);
+  const [relay, setRelay] = useState<"checking" | "up" | "down">("checking");
 
   useEffect(() => {
     if (zunia.connected) setPairingOpen(false);
   }, [zunia.connected]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2_500);
+    fetch(RELAY_API, { mode: "no-cors", signal: controller.signal })
+      .then(() => setRelay("up"))
+      .catch(() => setRelay("down"))
+      .finally(() => clearTimeout(timer));
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, []);
 
   async function connect(prefer: ZuniaTransportKind) {
     setPairingOpen(prefer !== "extension");
@@ -91,12 +106,12 @@ export function App() {
               <button
                 key={kind}
                 type="button"
-                disabled={busy || (kind === "walletconnect" && !WALLETCONNECT_PROJECT_ID)}
+                disabled={busy || (kind === "walletconnect" && !WALLETCONNECT_PROJECT_ID) || (kind === "native-ws" && relay === "down")}
                 onClick={() => void connect(kind)}
                 data-testid={`connect-${kind}`}
               >
                 <strong>{label}</strong>
-                <span>{hint}</span>
+                <span>{kind === "native-ws" && relay === "down" ? "The relay is not responding" : hint}</span>
               </button>
             ))}
           </div>
@@ -109,7 +124,10 @@ export function App() {
       </section>
 
       <SignInPanel zunia={zunia} log={log} />
+      <MessagePanel zunia={zunia} log={log} />
+      <AminoPanel zunia={zunia} log={log} />
       <SendPanel zunia={zunia} log={log} />
+      <SuggestChainPanel zunia={zunia} log={log} />
       <EventLog log={log} />
 
       <ConnectPairingModal

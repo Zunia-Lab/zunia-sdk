@@ -23,6 +23,7 @@ export class FakeProvider implements ZuniaProvider {
   keyReads = 0;
   enableError: { message: string; code?: string } | null = null;
   disabled: string[][] = [];
+  suggested: unknown[] = [];
   private secret = sha256(utf8ToBytes("fake provider key 1"));
   private readonly listeners = new Map<string, Set<Listener>>();
 
@@ -84,6 +85,10 @@ export class FakeProvider implements ZuniaProvider {
 
   async signDirect(_chainId: string, _signer: string, signDoc: unknown): Promise<unknown> {
     return { signed: signDoc, signature: this.signatureFor(new Uint8Array(32)) };
+  }
+
+  async experimentalSuggestChain(chainInfo: unknown): Promise<void> {
+    this.suggested.push(chainInfo);
   }
 
   async signArbitrary(_chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature> {

@@ -13,6 +13,7 @@ import {
   type SignInResult,
   type StdSignDoc,
   type StdSignature,
+  type SuggestedChain,
   type ZuniaAccountInfo,
   type ZuniaKey,
   type ZuniaOfflineSigner,
@@ -231,6 +232,10 @@ export class ZuniaSessionImpl implements ZuniaSession {
 
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature> {
     return this.run((transport) => transport.signArbitrary(chainId, signer, data));
+  }
+
+  suggestChain(chain: SuggestedChain): Promise<void> {
+    return this.run((transport) => transport.suggestChain(chain));
   }
 
   /**

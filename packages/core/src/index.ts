@@ -110,6 +110,7 @@ export type {
   RestoreOptions,
   SignInOptions,
   SignInResult,
+  SuggestedChain,
   ZuniaAccountInfo,
   ZuniaPairing,
   ZuniaSession,

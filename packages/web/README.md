@@ -98,6 +98,8 @@ await client.sendTokens(account.address, recipient, [{ denom: "uatom", amount: "
 
 `getOfflineSignerOnlyAmino(chainId)`, `signAmino`, `signDirect` and `signArbitrary` are there too. Results use `Uint8Array` and `bigint` on every transport, as CosmJS expects.
 
+`session.suggestChain(chain)` asks the extension to add a chain it does not already know. The wallet shows the endpoints and asks before it saves anything. QR and WalletConnect sessions cannot add chains.
+
 ## Events
 
 ```ts

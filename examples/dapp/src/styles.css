@@ -84,6 +84,23 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+textarea {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: Canvas;
+  color: CanvasText;
+  resize: vertical;
+}
+
 button.link {
   background: none;
   border: none;

@@ -127,4 +127,21 @@ describe("ExtensionTransport", () => {
     assert.ok(log.includes("disconnect:user"));
     await assert.rejects(transport.signArbitrary(HUB, provider.address, "x"), isCode("NOT_CONNECTED"));
   });
+
+  it("asks the extension to add a chain", async () => {
+    const { provider, transport } = setup();
+    const chain = {
+      chainId: "zunia-bench-1",
+      chainName: "Zunia bench",
+      rpc: "https://rpc.example.org",
+      rest: "https://rest.example.org",
+      bip44: { coinType: 118 },
+      bech32Config: { bech32PrefixAccAddr: "zbench" },
+      currencies: [{ coinDenom: "ZBN", coinMinimalDenom: "uzbn", coinDecimals: 6 }],
+    };
+    await assert.rejects(transport.suggestChain(chain), isCode("NOT_CONNECTED"));
+    await transport.connect({ chains: [HUB] });
+    await transport.suggestChain(chain);
+    assert.deepEqual(provider.suggested, [chain]);
+  });
 });

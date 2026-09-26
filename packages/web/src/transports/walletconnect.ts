@@ -276,6 +276,10 @@ export class WalletConnectTransport implements ZuniaTransport {
     return normalizeStdSignature(raw);
   }
 
+  async suggestChain(): Promise<void> {
+    throw new ZuniaConnectError("UNSUPPORTED", "Adding a chain is only available through the Zunia extension");
+  }
+
   private async init(options: ZuniaWebConnectOptions | ZuniaWebRestoreOptions): Promise<WalletConnectClient> {
     if (this.client) return this.client;
     const projectId = options.walletConnectProjectId;

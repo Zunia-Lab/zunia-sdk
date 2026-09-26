@@ -471,6 +471,10 @@ export class NativeWsTransport implements ZuniaTransport {
     return normalizeStdSignature(raw);
   }
 
+  async suggestChain(): Promise<void> {
+    throw new ZuniaConnectError("UNSUPPORTED", "Adding a chain is only available through the Zunia extension");
+  }
+
   private async createSession(apiBase: string): Promise<CreateConnectSessionResponse> {
     let response: Response;
     try {

@@ -13,6 +13,7 @@ import {
   type SignDocInput,
   type StdSignDoc,
   type StdSignature,
+  type SuggestedChain,
   type ZuniaAccountInfo,
   type ZuniaProvider,
   type ZuniaSessionEvents,
@@ -165,6 +166,18 @@ export class ExtensionTransport implements ZuniaTransport {
     if (!provider.signArbitrary) throw new ZuniaConnectError("UNSUPPORTED", "This extension cannot sign messages");
     try {
       return normalizeStdSignature(await provider.signArbitrary(chainId, signer, data));
+    } catch (error) {
+      throw toZuniaConnectError(error);
+    }
+  }
+
+  async suggestChain(chain: SuggestedChain): Promise<void> {
+    const provider = this.requireProvider();
+    if (!provider.experimentalSuggestChain) {
+      throw new ZuniaConnectError("UNSUPPORTED", "This extension cannot add chains");
+    }
+    try {
+      await provider.experimentalSuggestChain(chain);
     } catch (error) {
       throw toZuniaConnectError(error);
     }

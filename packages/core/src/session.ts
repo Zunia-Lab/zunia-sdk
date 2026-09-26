@@ -99,6 +99,26 @@ export interface SignInOptions {
   uri?: string;
 }
 
+/**
+ * A Keplr-style chain the site asks the extension to add.
+ * The wallet shows the endpoints and asks before it saves anything.
+ */
+export interface SuggestedChain {
+  chainId: string;
+  chainName: string;
+  rpc: string;
+  rest: string;
+  bip44: { coinType: number };
+  bech32Config: { bech32PrefixAccAddr: string };
+  currencies: ReadonlyArray<{ coinDenom: string; coinMinimalDenom: string; coinDecimals: number }>;
+  feeCurrencies?: ReadonlyArray<{
+    coinDenom: string;
+    coinMinimalDenom: string;
+    coinDecimals: number;
+    gasPriceStep?: { low?: number; average?: number; high?: number };
+  }>;
+}
+
 /** Send all of it to your server and call `verifySignIn` there. */
 export interface SignInResult {
   message: string;
@@ -119,6 +139,8 @@ export interface ZuniaTransport {
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse>;
   signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse>;
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature>;
+  /** Asks the wallet to add a chain it does not already know. Extension only. */
+  suggestChain(chain: SuggestedChain): Promise<void>;
   on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
   off<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
 }
@@ -139,6 +161,7 @@ export interface ZuniaSession {
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse>;
   signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse>;
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature>;
+  suggestChain(chain: SuggestedChain): Promise<void>;
   signIn(options: SignInOptions): Promise<SignInResult>;
   on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
   off<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
