@@ -10,3 +10,4 @@ First public release.
 - QR pairing survives network drops: heartbeat, reconnect with backoff, resend of unconfirmed requests, per-request timeouts.
 - Results normalized to `Uint8Array` and `bigint` on every transport, so CosmJS works unchanged.
 - `renderQrSvg`, the Connect with Zunia button and its stylesheet (`@zunialab/sdk-web/connect-button.css`).
+- `session.suggestChain` asks the extension to add a chain. QR and WalletConnect sessions cannot add chains.
