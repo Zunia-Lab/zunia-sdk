@@ -85,7 +85,12 @@ export const DEFAULT_GAS_ADJUSTMENT = 1.4;
 const MAX_ACCOUNT_NESTING = 4;
 
 /** Keys a wrapper account nests the real `BaseAccount` under, in unwrap order. */
-const ACCOUNT_NESTING_KEYS = ["base_account", "base_vesting_account"] as const;
+const ACCOUNT_NESTING_KEYS = [
+  "base_account",
+  "baseAccount",
+  "base_vesting_account",
+  "baseVestingAccount",
+] as const;
 
 const DEFAULT_WAIT_TIMEOUT_MS = 60_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_500;
@@ -302,16 +307,16 @@ export function parseAccount(
  * Descend through account wrappers until the object carrying the signer fields
  * is reached.
  *
- * Descent stops as soon as a level has `account_number` or `sequence`, so a
- * chain that flattens its wrapper (some forks do) is read from the outer object
- * rather than from a nested stub.
+ * Descent stops only when a level has both `account_number` and `sequence`.
+ * A wrapper that proto-JSON-fills `account_number: "0"` while the real
+ * sequence lives on `base_account` must not be treated as the signer.
  */
 function unwrapBaseAccount(
   start: Record<string, unknown>,
 ): Record<string, unknown> | null {
   let row: Record<string, unknown> = start;
   for (let depth = 0; depth < MAX_ACCOUNT_NESTING; depth++) {
-    if ("account_number" in row || "sequence" in row) return row;
+    if ("account_number" in row && "sequence" in row) return row;
     let next: Record<string, unknown> | null = null;
     for (const key of ACCOUNT_NESTING_KEYS) {
       const candidate = asRecord(row[key]);

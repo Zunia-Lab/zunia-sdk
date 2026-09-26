@@ -321,6 +321,19 @@ function short(address: string): string {
   return address.length > 22 ? `${address.slice(0, 10)}…${address.slice(-6)}` : address;
 }
 
+/**
+ * Abbreviate a denom in a sentence.
+ *
+ * An `ibc/` hash is one unbreakable token. The confirm card shows the full
+ * value on its own row; the sentence only needs enough to recognise it.
+ */
+function shortToken(denom: string): string {
+  if (denom.startsWith("ibc/") && denom.length > 20) {
+    return `ibc/${denom.slice(4, 12)}…${denom.slice(-6)}`;
+  }
+  return denom.length > 32 ? `${denom.slice(0, 14)}…${denom.slice(-6)}` : denom;
+}
+
 /* -------------------------------------------------------------------------- *
  * Byte length
  * -------------------------------------------------------------------------- */
@@ -1332,7 +1345,7 @@ function inspectWasm(
     };
   }
 
-  let summary = `On arrival, swaps to ${swap.outputDenom} (${describeSlippage(swap.slippage)}) and pays ${short(swap.receiver)}.`;
+  let summary = `On arrival, swaps to ${shortToken(swap.outputDenom)} (${describeSlippage(swap.slippage)}) and pays ${short(swap.receiver)}.`;
   if (swap.onFailedDelivery.kind === "do_nothing") {
     summary += " Recovery is off.";
     warnings.push(DO_NOTHING_WARNING);

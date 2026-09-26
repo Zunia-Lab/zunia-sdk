@@ -326,6 +326,17 @@ export {
 } from "./swap.js";
 
 /* -------------------------------------------------------------------------- *
+ * xcs-route.ts — the route the crosschain-swaps contract will execute
+ * -------------------------------------------------------------------------- */
+
+export type { XcsRouteRead } from "./xcs-route.js";
+export {
+  parseXcsPoolRoute,
+  parseXcsSwapContract,
+  readXcsExecutableRoute,
+} from "./xcs-route.js";
+
+/* -------------------------------------------------------------------------- *
  * nft.ts — CW721 and ICS721
  * -------------------------------------------------------------------------- */
 

@@ -180,6 +180,29 @@ test("a 404 falls back without retrying; a 400 stops immediately", async () => {
   assert.equal(bad.urls.length, 1, "a 400 is an answer, not a transport failure");
 });
 
+test("a contract error keeps the gateway message", async () => {
+  const rec = recorder([
+    async () =>
+      new Response(
+        JSON.stringify({
+          code: 2,
+          message: "Vec<SwapAmountInRoute> not found: query wasm contract failed",
+          details: [],
+        }),
+        { status: 500 },
+      ),
+  ]);
+  const client = createLcdClient(
+    config({ endpoints: ["https://a.example"], fetchImpl: rec.fetchImpl, retries: 0 }),
+  );
+  await assert.rejects(client.getJson("/smart"), (error: unknown) => {
+    assert.ok(isInterchainError(error));
+    assert.equal(error.httpStatus, 500);
+    assert.match(error.message, /not found/);
+    return true;
+  });
+});
+
 test("a non-JSON body is malformed-response and moves to the next endpoint", async () => {
   const rec = recorder([
     async () => new Response("<html>rate limited</html>", { status: 200 }),

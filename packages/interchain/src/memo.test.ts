@@ -611,6 +611,22 @@ test("validateMemo describes a crosschain swap and its recovery address", () => 
   assert.deepEqual(result.warnings, []);
 });
 
+test("validateMemo abbreviates an ibc output denom in the sentence", () => {
+  const denom = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2";
+  const result = validateMemo(
+    buildXcsSwapMemo({
+      contract: XCS_CONTRACT,
+      outputDenom: denom,
+      receiver: "cosmos1receiver",
+      slippage: { kind: "twap", slippagePercentage: "1", windowSeconds: 10 },
+      onFailedDelivery: { kind: "local_recovery_addr", address: "osmo1recovery" },
+    }),
+  );
+  assert.equal(result.xcs?.outputDenom, denom);
+  assert.match(result.summary, /swaps to ibc\/27394FB0…1E5EB2 /);
+  assert.equal(result.summary.includes(denom), false);
+});
+
 test("validateMemo warns when a swap cannot recover stranded funds", () => {
   const result = validateMemo(
     buildXcsSwapMemo({

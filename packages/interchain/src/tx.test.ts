@@ -232,6 +232,23 @@ test("getAccount unwraps EthAccount and reports the ethermint key type", async (
   assert.equal(isEthSecp256k1PubKey(account.pubKey), true);
 });
 
+test("getAccount does not take sequence 0 from a wrapper that only has account_number", async () => {
+  const lcd = stubClient([
+    {
+      account: {
+        "@type": "/cosmos.vesting.v1beta1.ContinuousVestingAccount",
+        account_number: "0",
+        base_vesting_account: {
+          base_account: baseAccount({ account_number: "12", sequence: "36" }),
+        },
+      },
+    },
+  ]);
+  const account = await getAccount(lcd, CHAIN_ID, ADDRESS);
+  assert.equal(account.accountNumber, "12");
+  assert.equal(account.sequence, "36");
+});
+
 test("getAccount unwraps BaseVestingAccount", async () => {
   const lcd = stubClient([
     {

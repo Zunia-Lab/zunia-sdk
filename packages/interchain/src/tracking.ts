@@ -711,8 +711,15 @@ export function isHopStalled(check: StallCheck): boolean {
  * - `swap-delivery-failed` — a crosschain-swap executed but the outbound
  *   transfer did not land. The output sits in the Osmosis contract and only the
  *   `local_recovery_addr` can pull it out, with `{"recover":{}}`.
+ * - `source-failed` — the signed source transaction was included with a
+ *   non-zero code (insufficient funds, out of gas, …). No packet left.
  */
-export type PacketFailureKind = "timeout" | "ack-error" | "stalled" | "swap-delivery-failed";
+export type PacketFailureKind =
+  | "timeout"
+  | "ack-error"
+  | "stalled"
+  | "swap-delivery-failed"
+  | "source-failed";
 
 /** Terminal statuses: nothing further will happen to this packet. */
 export function isTerminalPacketStatus(status: PacketStatus): boolean {
@@ -1262,6 +1269,8 @@ export interface RouteTrace extends PacketTrace {
   readonly estimatedDurationSeconds: number;
   /** Diagnostics: probes that could not run, ambiguous forwards. Never shown raw. */
   readonly notes: readonly string[];
+  /** Source-tx `raw_log` when {@link PacketFailureKind} is `source-failed`. */
+  readonly sourceError?: string | null;
 }
 
 /** Knobs for {@link trackRoute}. */
@@ -1437,6 +1446,7 @@ export async function trackRoute(
   let failure: PacketFailureKind | null = null;
   let recovery: XcsRecovery | null = null;
   let sourceStartedAt: string | null = null;
+  let sourceError: string | null = null;
 
   function emptyHop(index: number, status: PacketStatus): RouteHopTrace {
     const hop = hops[index];
@@ -1497,6 +1507,7 @@ export async function trackRoute(
       estimatedDurationSeconds,
       notes,
       updatedAt: now(),
+      ...(sourceError ? { sourceError } : {}),
     };
   }
 
@@ -1519,7 +1530,25 @@ export async function trackRoute(
     return publish();
   }
 
-  sourceStartedAt = asString(txResponseOf(sourceTx)?.timestamp);
+  const sourceResponse = txResponseOf(sourceTx);
+  sourceStartedAt = asString(sourceResponse?.timestamp);
+  const sourceCode =
+    typeof sourceResponse?.code === "number" ? sourceResponse.code : 0;
+  if (sourceCode !== 0) {
+    sourceError =
+      asString(sourceResponse?.raw_log) ??
+      `Transaction failed (code ${sourceCode})`;
+    failure = "source-failed";
+    notes.push(`${plan.sourceChainId}: source tx failed, code ${sourceCode}`);
+    traces.push({
+      ...emptyHop(0, "failed"),
+      sendTxHash: txHash,
+      error: sourceError,
+      failure: "source-failed",
+      startedAt: sourceStartedAt,
+    });
+    return publish();
+  }
   const sourcePackets = extractPacketsFromTx(sourceTx);
   const firstHop = hops[0];
   let packet: ExtractedPacket | null =

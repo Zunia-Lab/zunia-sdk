@@ -475,6 +475,28 @@ test("resolveDenom rejects a trace that does not hash back to the denom asked fo
   assert.match(error.message, /hashes to/);
 });
 
+test("resolveDenom falls back to the v9 /denoms path when traces is unimplemented", async () => {
+  const hash = ATOM_ON_OSMOSIS.slice(4);
+  const { ctx, calls } = harness({
+    routes: {
+      [`osmosis-1/ibc/apps/transfer/v1/denom_traces/${hash}`]: () => ({
+        code: 12,
+        message: "Not Implemented",
+        details: [],
+      }),
+      [`osmosis-1/ibc/apps/transfer/v1/denoms/${hash}`]: () => ({
+        denom: { base: "uatom", trace: [{ port_id: "transfer", channel_id: "channel-0" }] },
+      }),
+    },
+  });
+  const resolved = await resolveDenom(ctx, "osmosis-1", ATOM_ON_OSMOSIS);
+  assert.equal(resolved.baseDenom, "uatom");
+  assert.deepEqual(calls, [
+    `osmosis-1/ibc/apps/transfer/v1/denom_traces/${hash}`,
+    `osmosis-1/ibc/apps/transfer/v1/denoms/${hash}`,
+  ]);
+});
+
 test("resolveDenom falls back to the v9 /denoms path on 404", async () => {
   const hash = ATOM_ON_OSMOSIS.slice(4);
   const { ctx, calls } = harness({

@@ -362,6 +362,18 @@ export interface IbcChannelService {
   ): Promise<readonly IbcChannelOption[]>;
 
   /**
+   * Every open transfer channel on `source` whose connection client resolved.
+   *
+   * One channel listing, then one client-state read per connection. Used to
+   * populate the route graph from a source chain without walking it once per
+   * destination.
+   */
+  findOutgoingIbcChannels(
+    source: ChainRef,
+    options?: ChannelQueryOptions,
+  ): Promise<readonly IbcChannelOption[]>;
+
+  /**
    * Check one channel id typed by the user.
    *
    * Accepts `channel-141` or `141`. Never throws for a chain-state reason: the
@@ -930,16 +942,12 @@ export function createIbcChannelService(
     };
   }
 
-  async function findIbcChannels(
+  async function findOutgoingIbcChannels(
     source: ChainRef,
-    dest: ChainRef,
     options: ChannelQueryOptions = {},
   ): Promise<readonly IbcChannelOption[]> {
     const sourceChain = resolveChain(source);
-    const destChainId = refChainId(dest);
-    if (!sourceChain || !destChainId) return [];
-    if (sourceChain.chainId === destChainId) return [];
-
+    if (!sourceChain) return [];
     const client = clientFor(sourceChain);
     if (!client) return [];
     const portId = options.portId ?? TRANSFER_PORT;
@@ -952,12 +960,18 @@ export function createIbcChannelService(
         assertNotAborted(options.signal, client.chainId);
         if (row.state !== "open") continue;
         if (!row.connectionId) continue;
-        const counterpartyChainId = await resolveConnectionChainId(
-          client,
-          row.connectionId,
-          options,
-        );
-        if (counterpartyChainId !== destChainId) continue;
+        let counterpartyChainId: string | null = null;
+        try {
+          counterpartyChainId = await resolveConnectionChainId(
+            client,
+            row.connectionId,
+            options,
+          );
+        } catch (error) {
+          if (isAborted(error)) throw error;
+          continue;
+        }
+        if (!counterpartyChainId) continue;
         matches.push({
           channelId: row.channelId,
           portId: row.portId,
@@ -974,11 +988,22 @@ export function createIbcChannelService(
       );
     } catch (error) {
       if (isAborted(error)) throw error;
-      // Live reads off is a settings state, and the three clients all render it
-      // as "no channels found" plus their own prompt elsewhere in the screen.
       if (isReadsDisabled(error)) return [];
       throw error;
     }
+  }
+
+  async function findIbcChannels(
+    source: ChainRef,
+    dest: ChainRef,
+    options: ChannelQueryOptions = {},
+  ): Promise<readonly IbcChannelOption[]> {
+    const destChainId = refChainId(dest);
+    if (!destChainId) return [];
+    const sourceChain = resolveChain(source);
+    if (!sourceChain || sourceChain.chainId === destChainId) return [];
+    const outgoing = await findOutgoingIbcChannels(source, options);
+    return outgoing.filter((row) => row.counterpartyChainId === destChainId);
   }
 
   async function validateIbcChannel(
@@ -1327,6 +1352,7 @@ export function createIbcChannelService(
 
   return {
     findIbcChannels,
+    findOutgoingIbcChannels,
     validateIbcChannel,
     checkCounterpartyChannel,
     detectPfmSupport: (chain, options = {}) => detectModule("packet-forward", chain, options),

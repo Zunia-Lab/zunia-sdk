@@ -635,6 +635,22 @@ function nativeResult(chainId: string, denom: string): ResolvedDenomOnChain {
   };
 }
 
+/** gRPC UNIMPLEMENTED, including HTTP 200 bodies some gateways still return. */
+function isUnimplementedTrace(body: unknown): boolean {
+  const root = asRecord(body);
+  if (!root) return false;
+  if (root["code"] === 12 || root["code"] === "12") return true;
+  const message = readString(root, "message") ?? "";
+  return /not implemented/i.test(message);
+}
+
+function isGoneTraceError(error: unknown): boolean {
+  return (
+    isInterchainError(error) &&
+    (error.httpStatus === 404 || error.httpStatus === 501)
+  );
+}
+
 async function fetchTrace(
   ctx: DenomContext,
   chainId: string,
@@ -646,21 +662,20 @@ async function fetchTrace(
     ...options,
     cacheTtlMs: options.cacheTtlMs ?? ctx.traceCacheTtlMs ?? DEFAULT_TRACE_CACHE_TTL_MS,
   };
+  let tracesError: unknown;
   try {
-    return parseDenomTrace(await client.getJson(`${DENOM_TRACES_PATH}/${hash}`, request));
+    const body = await client.getJson(`${DENOM_TRACES_PATH}/${hash}`, request);
+    // Cosmos Hub and its public LCDs retired `/denom_traces` with gRPC code 12
+    // on HTTP 200. Treat that as "gone" so the v9 `/denoms` path can run.
+    if (!isUnimplementedTrace(body)) return parseDenomTrace(body);
   } catch (error) {
-    // ibc-go v9 dropped the endpoint. Retry once on the newer path before
-    // reporting failure; anything else (timeout, 5xx, bad JSON) is the caller's
-    // problem and is rethrown untouched.
-    const gone =
-      isInterchainError(error) &&
-      (error.httpStatus === 404 || error.httpStatus === 501);
-    if (!gone) throw error;
-    try {
-      return parseDenomTrace(await client.getJson(`${DENOMS_PATH}/${hash}`, request));
-    } catch {
-      throw error;
-    }
+    tracesError = error;
+    if (!isGoneTraceError(error)) throw error;
+  }
+  try {
+    return parseDenomTrace(await client.getJson(`${DENOMS_PATH}/${hash}`, request));
+  } catch (error) {
+    throw tracesError ?? error;
   }
 }
 

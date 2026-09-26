@@ -437,13 +437,25 @@ export function createLcdClient(config: LcdClientConfig): LcdClientHandle {
         headers: { accept: "application/json", ...(config.headers ?? {}) },
       });
 
+      // Read the body either way. A contract query that panics (wasmd
+      // answers `get_route` with HTTP 500 and "not found") is only
+      // distinguishable from a dead gateway by that message, and the POST
+      // path already keeps it.
+      const text = await res.text();
       if (!res.ok) {
-        throw new HttpFailure(res.status, endpoint, chainId);
+        let detail = "";
+        if (text) {
+          try {
+            detail = serverMessage(JSON.parse(text) as unknown);
+          } catch {
+            detail = "";
+          }
+        }
+        throw new HttpFailure(res.status, endpoint, chainId, detail);
       }
 
-      // Read as text so a proxy's HTML error page becomes a clear
-      // `malformed-response` rather than an opaque parse failure.
-      const text = await res.text();
+      // A proxy's HTML error page becomes a clear `malformed-response`
+      // rather than an opaque parse failure.
       try {
         return JSON.parse(text) as unknown;
       } catch (cause) {
