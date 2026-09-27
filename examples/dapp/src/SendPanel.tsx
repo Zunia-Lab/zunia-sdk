@@ -47,14 +47,27 @@ export function SendPanel({ zunia, log }: { zunia: UseZuniaSessionResult; log: E
       const { GasPrice, SigningStargateClient, assertIsDeliverTxSuccess } = await loadCosmJs();
       const signer = zunia.session.getOfflineSigner(CHAIN.chainId);
       const client = await SigningStargateClient.connectWithSigner(CHAIN.rpc, signer, { gasPrice: GasPrice.fromString(CHAIN.gasPrice) });
+      // A new address is not an error. CosmJS refuses to sign until the chain
+      // has an account; the first transaction uses account 0, sequence 0.
+      const readAccount = client.getAccount.bind(client);
+      client.getSequence = async (accountAddress: string) => {
+        const account = await readAccount(accountAddress);
+        if (!account) return { accountNumber: 0n, sequence: 0 };
+        return { accountNumber: account.accountNumber, sequence: account.sequence };
+      };
       const result = await client.sendTokens(address, recipient.trim(), [{ denom: CHAIN.denom, amount: amount.trim() }], "auto", memo);
       client.disconnect();
       assertIsDeliverTxSuccess(result);
       setSent({ hash: result.transactionHash, height: result.height });
       log.add("sent", `${amount} ${CHAIN.denom} to ${recipient.trim()}, block ${result.height}`);
     } catch (failure) {
-      setError(describeError(failure));
-      log.add("send failed", describeError(failure));
+      const message = describeError(failure);
+      const empty =
+        /does not exist|insufficient funds/i.test(message)
+          ? `This address has no ${CHAIN.denom} on ${CHAIN.chainId} yet. Get testnet tokens from the Osmosis faucet, then send again.`
+          : message;
+      setError(empty);
+      log.add("send failed", empty);
     } finally {
       setBusy(false);
     }
@@ -73,7 +86,7 @@ export function SendPanel({ zunia, log }: { zunia: UseZuniaSessionResult; log: E
         </label>
         <label>
           Amount ({CHAIN.denom})
-          <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" pattern="[0-9]+" required data-testid="send-amount" />
+          <input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, ""))} inputMode="numeric" pattern="[0-9]+" required data-testid="send-amount" />
         </label>
         <label>
           Memo

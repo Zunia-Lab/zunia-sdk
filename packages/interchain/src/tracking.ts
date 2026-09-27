@@ -1587,8 +1587,15 @@ export async function trackRoute(
     // ends the route has to be able to settle it.
     if (hop.channelId === "") {
       const previous = traces[index - 1];
+      // A swap that is the first hop already ran inside the source transaction
+      // (a direct contract call). Leaving it pending would keep the whole
+      // route open after the outbound packet has settled.
       const derived: PacketStatus =
-        index === 0 ? "pending" : previous === undefined ? "unknown" : previous.status;
+        index === 0
+          ? "acknowledged"
+          : previous === undefined
+            ? "unknown"
+            : previous.status;
       traces.push({
         ...emptyHop(index, derived),
         receiveTxHash: previousReceiveTxHash,

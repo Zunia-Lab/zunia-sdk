@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Plugin } from "vite";
+import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 import { ZuniaSignInError, createNonce, verifySignIn, type StdSignature, type VerifiedSignIn } from "@zunialab/sdk-core";
 
 const NONCE_TTL_MS = 10 * 60_000;
@@ -21,7 +21,12 @@ export interface SignInVerifierOptions {
  */
 export function createSignInVerifier(options: SignInVerifierOptions) {
   const nonces = new Map<string, number>();
+  const binding = { domain: options.domain };
   return {
+    /** The host signatures must name. Set once from how this process listens, never from a request. */
+    setDomain(domain: string): void {
+      binding.domain = domain;
+    },
     issueNonce(): string {
       const now = Date.now();
       for (const [nonce, expiresAt] of nonces) if (expiresAt <= now) nonces.delete(nonce);
@@ -40,7 +45,7 @@ export function createSignInVerifier(options: SignInVerifierOptions) {
       if (expiresAt === undefined || expiresAt <= Date.now()) {
         throw new ZuniaSignInError("NONCE_MISMATCH", "Unknown or expired nonce, ask for a new one");
       }
-      return verifySignIn({ message, signature: signature as StdSignature, domain: options.domain, nonce, chainId: options.chainId });
+      return verifySignIn({ message, signature: signature as StdSignature, domain: binding.domain, nonce, chainId: options.chainId });
     },
   };
 }
@@ -77,6 +82,20 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/**
+ * Bind verification to the host this process actually listens on.
+ * `SIGN_IN_DOMAIN` still wins. The request Host header is never read.
+ */
+function bindDomain(server: ViteDevServer | PreviewServer, verifier: ReturnType<typeof createSignInVerifier>): void {
+  if (process.env.SIGN_IN_DOMAIN) return;
+  const apply = () => {
+    const address = server.httpServer?.address();
+    if (address && typeof address === "object") verifier.setDomain(`localhost:${address.port}`);
+  };
+  if (server.httpServer?.listening) apply();
+  else server.httpServer?.once("listening", apply);
+}
+
 /** `POST /api/nonce` and `POST /api/verify` on the Vite dev and preview servers. */
 export function signInApi(options: SignInVerifierOptions): Plugin {
   const verifier = createSignInVerifier(options);
@@ -99,9 +118,11 @@ export function signInApi(options: SignInVerifierOptions): Plugin {
   return {
     name: "zunia-example-sign-in",
     configureServer(server) {
+      bindDomain(server, verifier);
       server.middlewares.use(handle);
     },
     configurePreviewServer(server) {
+      bindDomain(server, verifier);
       server.middlewares.use(handle);
     },
   };

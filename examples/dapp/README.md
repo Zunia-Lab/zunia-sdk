@@ -23,7 +23,7 @@ pnpm build
 pnpm --filter zunia-example-dapp dev
 ```
 
-Open http://localhost:5173 (not 127.0.0.1: the sign-in server only accepts messages signed for `localhost:5173`).
+Open http://localhost:5173 (not 127.0.0.1). Sign-in checks the host the page is actually served on, which is `localhost` plus the port Vite bound. Set `SIGN_IN_DOMAIN` only when that host is fixed.
 
 - **Extension:** install the Zunia extension in the same browser.
 - **Phone (QR code):** run the relay from [zunia-backend](https://github.com/Zunia-Lab/zunia-backend) (`pnpm dev` listens on port 8788). Your phone must reach it, so set `VITE_ZUNIA_API` to your computer's address on the local network, or to a deployed relay.

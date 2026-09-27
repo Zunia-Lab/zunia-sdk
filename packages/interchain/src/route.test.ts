@@ -1053,7 +1053,7 @@ test("only a swap carries a venue input denom", async () => {
   assert.equal(local.best?.venueInputDenom, "usafro");
 });
 
-test("a venue on the source chain is not planned as one route", async () => {
+test("funds already on the venue are one contract call, then the contract sends onward", async () => {
   const result = await planRoute(
     request({
       sourceChainId: "osmosis-1",
@@ -1063,11 +1063,24 @@ test("a venue on the source chain is not planned as one route", async () => {
       allowSwap: true,
       sender: "osmo1sender",
       recipient: "juno1recipient",
+      slippagePercent: 1,
+      recoveryAddress: "osmo1recovery",
     }),
     deps(),
   );
-  assert.deepEqual(result.candidates, []);
-  assert.ok(result.warnings.some((w) => w.includes("takes two transactions")));
+  const best = result.best;
+  assert.ok(best);
+  assert.equal(best.strategy, "ibc-swap");
+  assert.equal(best.plan.requiresIbcHooks, false);
+  assert.equal(best.plan.hops[0]?.kind, "swap");
+  assert.equal(best.plan.hops[1]?.channelId, "channel-42");
+  assert.equal(best.plan.hops[1]?.kind, "forward");
+  assert.equal(best.receiver, OSMOSIS_XCS);
+  assert.equal(best.venueInputDenom, "uosmo");
+  const swap = objectAt(objectAt(objectAt(memoOf(best), "wasm"), "msg"), "osmosis_swap");
+  assert.equal(swap.output_denom, "ujuno");
+  assert.equal(swap.receiver, "juno1recipient");
+  assert.deepEqual(swap.on_failed_delivery, { local_recovery_addr: "osmo1recovery" });
 });
 
 test("a venue whose denom list excludes the arriving token is flagged", async () => {

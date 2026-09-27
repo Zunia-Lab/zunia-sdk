@@ -1,9 +1,11 @@
 /**
  * Route planning: what a hosted routing API would do, done locally.
  *
- * A route is a single ICS20 transfer the user signs on the source chain, plus a
- * memo that makes every remaining hop happen without another signature. This
- * module decides which channels that transfer uses and what goes in the memo.
+ * A route is one signature. Most routes are a single ICS20 transfer the user
+ * signs on the source chain, plus a memo that makes every remaining hop happen
+ * without another signature. When the funds are already on the swap venue, the
+ * signature is a contract call and the contract emits the outbound transfer.
+ * This module decides which channels that path uses and what goes in the memo.
  * It produces {@link RoutePlan} data and stops: nothing here encodes a message,
  * derives an address, signs, or broadcasts. Signing stays in zunia-core.
  *
@@ -1567,16 +1569,6 @@ export async function planRoute(
       addWarning(warnings, `Swap venue chain ${venue.chainId} is not in the registry`);
       continue;
     }
-    if (venue.chainId === source.chainId) {
-      // ibc-hooks fires on an incoming packet. Swapping where the funds already
-      // are means a contract call and then a transfer: two signatures, which is
-      // a different flow, not a route.
-      addWarning(
-        warnings,
-        `Swapping on ${venueChain.chainName} and then transferring takes two transactions and is not planned as one route`,
-      );
-      continue;
-    }
     if (!hasCosmwasm(venueChain, deps.capabilities)) {
       addWarning(
         warnings,
@@ -1584,8 +1576,12 @@ export async function planRoute(
       );
       continue;
     }
+    // Funds already on the venue are one signature: MsgExecuteContract with
+    // those coins. The contract swaps and emits the outbound IBC transfer
+    // itself, so there is no inbound packet and ibc-hooks is not involved.
+    const onVenue = venue.chainId === source.chainId;
     const hooks = deps.capabilities?.(venue.chainId)?.ibcHooks;
-    if (hooks === false && options.requireIbcHooksSupport === true) {
+    if (!onVenue && hooks === false && options.requireIbcHooksSupport === true) {
       addWarning(
         warnings,
         `${venueChain.chainName} does not run ibc-hooks, so the swap memo would be ignored`,
@@ -1593,7 +1589,9 @@ export async function planRoute(
       continue;
     }
 
-    const inPaths = findRoutePaths(source.chainId, venue.chainId, directory, pathOptions);
+    const inPaths = onVenue
+      ? [{ chainIds: [source.chainId], links: [] }]
+      : findRoutePaths(source.chainId, venue.chainId, directory, pathOptions);
     if (inPaths.length === 0) {
       addWarning(
         warnings,
@@ -1621,7 +1619,9 @@ export async function planRoute(
         const inLinks = applyOverrides(inPath.links, overrides);
         const outLinks = applyOverrides(outPath.links, overrides);
         const first = inLinks[0];
-        if (!first) continue;
+        // An empty inbound leg is the venue-origin case: the user calls the
+        // contract directly. Every other plan still has to start with a packet.
+        if (!onVenue && !first) continue;
 
         const planWarnings = [...warnings];
         const chainIds = [...inPath.chainIds, ...outPath.chainIds.slice(1)];
@@ -1634,7 +1634,7 @@ export async function planRoute(
           forwardingChainIds,
           warnings: planWarnings,
         });
-        if (hooks !== true) {
+        if (!onVenue && hooks !== true) {
           addWarning(
             planWarnings,
             hooks === false
@@ -1645,8 +1645,11 @@ export async function planRoute(
 
         // What the swap receives, as denominated on the venue chain. Needed to
         // tell the venue what it is selling; unknowable without a trace.
-        const venueInputState = stepDenomAlong(inputState, inLinks);
-        const venueInputDenom = await denomStringFor(venueInputState, hasher);
+        // Funds that start on the venue are already named the venue's way.
+        const venueInputState = onVenue ? null : stepDenomAlong(inputState, inLinks);
+        const venueInputDenom = onVenue
+          ? request.inputDenom
+          : await denomStringFor(venueInputState, hasher);
         if (venueInputDenom === null) {
           addWarning(
             planWarnings,
@@ -1738,7 +1741,7 @@ export async function planRoute(
           wasmMemo,
         );
         const receiver =
-          inLinks.length === 1
+          inLinks.length <= 1
             ? venue.contractAddress
             : intermediateReceiverFor(
                 inPath.chainIds[1] ?? "",
@@ -1787,7 +1790,7 @@ export async function planRoute(
         ];
 
         const unwindsDenom =
-          unwindChannelId !== null && first.channelId === unwindChannelId;
+          unwindChannelId !== null && first?.channelId === unwindChannelId;
         const plan: RoutePlan = {
           sourceChainId: source.chainId,
           destChainId: dest.chainId,
@@ -1798,7 +1801,9 @@ export async function planRoute(
           warnings: planWarnings,
           estimatedDurationSeconds: durationFor(options.durations, totalHops, 1),
           requiresPfm: preForwards.length > 0 || postForwards.length > 0,
-          requiresIbcHooks: true,
+          // A venue-origin swap is a contract call. The wasm object in the
+          // memo is the execute body the signer unwraps, not an ibc-hooks memo.
+          requiresIbcHooks: !onVenue,
         };
         if (options.requirePfmSupport === true && capabilityGaps > 0) continue;
 

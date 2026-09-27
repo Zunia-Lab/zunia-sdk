@@ -54,7 +54,7 @@ export const ZUNIA_NATIVE_CONNECT = {
 
 export const ZUNIA_EXTENSION_IDS = {
   /** Firefox AMO / gecko id */
-  gecko: "extension@zunialab.com",
+  gecko: "wallet@zunialab.com",
 } as const;
 
 export const ZUNIA_APP_IDS = {

@@ -9,7 +9,7 @@ export const CHAIN = {
 };
 
 /** The relay that carries QR pairing. `pnpm dev` in zunia-backend listens on 8788. */
-export const RELAY_API = import.meta.env.VITE_ZUNIA_API ?? "https://api.zunialab.com";
+export const RELAY_API = import.meta.env.VITE_ZUNIA_API ?? "http://localhost:8788";
 
 export const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "";
 
