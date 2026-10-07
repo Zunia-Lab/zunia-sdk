@@ -1,6 +1,6 @@
 {
   "name": "@zunialab/sdk-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Types, sign-in messages, server-side verification and zunia.connect.v2 crypto for Zunia wallet integrations",
   "repository": {
     "type": "git",

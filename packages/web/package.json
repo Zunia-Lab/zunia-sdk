@@ -1,6 +1,6 @@
 {
   "name": "@zunialab/sdk-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Connect a web dApp to the Zunia wallet: browser extension, phone by QR code, or WalletConnect",
   "repository": {
     "type": "git",

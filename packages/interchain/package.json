@@ -1,6 +1,6 @@
 {
   "name": "@zunialab/interchain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dependency-free IBC engine for Zunia: channel discovery, denom unwinding, PFM/ibc-hooks memos, cross-chain swaps and NFTs",
   "repository": {
     "type": "git",
