@@ -135,6 +135,21 @@ describe("aminoNeedsEscaping", () => {
     assert.equal(aminoNeedsEscaping([builtContract({ transfer_nft: { token_id: "a<b" } })]), true, "base64 body");
     assert.equal(aminoNeedsEscaping([{ typeUrl: "/ibc.applications.transfer.v1.MsgTransfer", value: { memo: "x>y" } }]), true);
   });
+
+  it("also finds the two line separators the chain escapes and Zunia 0.1.4 does not", () => {
+    // Built from code points: raw U+2028/U+2029 are line terminators in source.
+    const lineSeparator = String.fromCharCode(0x2028);
+    const paragraphSeparator = String.fromCharCode(0x2029);
+    assert.equal(aminoNeedsEscaping([send], `rent${lineSeparator}food`), true, "memo, U+2028");
+    assert.equal(aminoNeedsEscaping([send], `rent${paragraphSeparator}food`), true, "memo, U+2029");
+    assert.equal(aminoNeedsEscaping([builtContract({ transfer_nft: { token_id: `a${lineSeparator}b` } })]), true, "base64 body");
+    assert.equal(
+      aminoNeedsEscaping([{ typeUrl: "/ibc.applications.transfer.v1.MsgTransfer", value: { memo: `x${paragraphSeparator}y` } }]),
+      true,
+    );
+    // The dashboard keeps the same rule (src/lib/tx/sign-mode.ts AMINO_ESCAPED).
+    assert.equal(aminoNeedsEscaping([send], "plain memo"), false);
+  });
 });
 
 describe("zuniaSignMode", () => {

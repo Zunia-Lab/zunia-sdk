@@ -64,7 +64,10 @@ const FIXED_IN: readonly [number, number, number] = [0, 1, 5];
 const EXECUTE_CONTRACT = "/cosmwasm.wasm.v1.MsgExecuteContract";
 const SEND = "/cosmos.bank.v1beta1.MsgSend";
 const POOLMANAGER = "/osmosis.poolmanager.";
-const ESCAPED = /[&<>]/;
+// Characters the chain's Amino JSON (Go encoding/json) writes escaped and Zunia
+// 0.1.4 and older write raw: & < > and the two line separators. Written as
+// escapes, never as raw U+2028/U+2029, which are line terminators in JS.
+const ESCAPED = /[&<>\u2028\u2029]/;
 const decoder = new TextDecoder();
 
 function parseVersion(value: unknown): [number, number, number] | null {
