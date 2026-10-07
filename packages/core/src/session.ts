@@ -1,5 +1,6 @@
 import type { ZuniaConnectError } from "./errors.js";
 import type { ZuniaDappMetadata } from "./protocol.js";
+import type { SignableMessage, ZuniaCapabilities } from "./signing.js";
 import type {
   AccountData,
   AminoSignResponse,
@@ -141,8 +142,22 @@ export interface ZuniaTransport {
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature>;
   /** Asks the wallet to add a chain it does not already know. Extension only. */
   suggestChain(chain: SuggestedChain): Promise<void>;
+  /**
+   * Extension only: from `locked`, asks the wallet to unlock (its unlock window opens, so call
+   * it from a click) and reads the accounts again. Keeps the site's grant.
+   */
+  unlock?(): Promise<void>;
+  /** Extension only: what the connected Zunia build can sign. */
+  capabilities?(): ZuniaCapabilities | null;
   on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
   off<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
+}
+
+/** What `getOfflineSignerFor` needs to pick Direct or Amino for the connected wallet. */
+export interface SignerForOptions {
+  readonly messages: readonly SignableMessage[];
+  readonly memo?: string;
+  readonly ethKeyChain?: boolean;
 }
 
 export interface ZuniaSession {
@@ -158,6 +173,20 @@ export interface ZuniaSession {
   getAccounts(): ZuniaAccountInfo[];
   getKey(chainId: string): ZuniaKey;
   getOfflineSigner(chainId: string): ZuniaOfflineSigner;
+  /** A CosmJS Amino-only signer. Optional here so existing implementations of this interface still compile. */
+  getOfflineSignerOnlyAmino?(chainId: string): Pick<ZuniaOfflineSigner, "getAccounts" | "signAmino">;
+  /**
+   * The CosmJS signer to use for these messages: Amino-only where the connected wallet can
+   * only sign them in Amino (a contract call on Zunia 0.1.4 or older), the full signer otherwise.
+   */
+  getOfflineSignerFor?(
+    chainId: string,
+    options: SignerForOptions,
+  ): ZuniaOfflineSigner | Pick<ZuniaOfflineSigner, "getAccounts" | "signAmino">;
+  /** From `locked`: asks the wallet to unlock (call it from a click) and reads the accounts again. */
+  unlock?(): Promise<void>;
+  /** What the connected Zunia extension can sign; null on other transports. */
+  readonly capabilities?: ZuniaCapabilities | null;
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse>;
   signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse>;
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature>;

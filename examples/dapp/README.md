@@ -7,7 +7,7 @@ A Vite + React app that uses the Zunia SDK the way a real dApp would:
 - Sign in, verified by a small server (`server/sign-in.ts`).
 - Sign a free-form message. This opens the message popup, separate from sign-in.
 - Sign an Amino document. The wallet signs it and the page does not broadcast it.
-- Send tokens with CosmJS through the session's offline signer.
+- Send tokens with CosmJS through `session.getOfflineSignerFor()`, which picks Direct or Amino for the connected wallet.
 - Suggest a chain the extension does not already know. This opens the add-chain popup. QR and WalletConnect cannot add chains.
 - Log every event the wallet sends back: account switches, locking, revocation.
 
@@ -45,10 +45,10 @@ Put them in `.env.local`:
 
 ## Where to look
 
-- `src/App.tsx`: connecting, the pairing dialog, restore on load.
+- `src/App.tsx`: connecting, the pairing dialog, restore on load, unlocking a wallet that was locked on load. In development (`pnpm dev`) it also sets `window.zuniaExample = { session }`, which the end-to-end tests sign through.
 - `src/SignInPanel.tsx` and `server/sign-in.ts`: both halves of sign-in. The server keeps nonces in memory; use a shared store when you run several processes.
 - `src/Approvals.tsx`: message signature, Amino signature, and chain suggestion.
-- `src/SendPanel.tsx`: CosmJS with `session.getOfflineSigner()`.
+- `src/SendPanel.tsx`: CosmJS with `session.getOfflineSignerFor()`.
 - `src/useEventLog.ts`: subscribing to session events.
 
-`pnpm build && pnpm preview` serves the production build with the same `/api` routes, which the end-to-end tests use.
+`pnpm build && pnpm preview` serves the production build with the same `/api` routes, without `window.zuniaExample`. The end-to-end tests in zunia-e2e run the development server.

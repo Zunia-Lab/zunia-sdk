@@ -15,9 +15,24 @@ import {
 
 type Listener = (data?: unknown) => void;
 
+/** How `signAmino` signs: a dummy digest (most tests), the chain's bytes, or Zunia 0.1.4's unescaped bytes. */
+export type FakeAminoSigning = "dummy" | "escaped" | "unescaped";
+
+function sortKeysDeep(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) sorted[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+  return sorted;
+}
+
 export class FakeProvider implements ZuniaProvider {
-  readonly version = "test";
+  version = "test";
+  extensionVersion: string | undefined = undefined;
+  features: readonly string[] | undefined = undefined;
   readonly mode = "extension" as const;
+  aminoSigning: FakeAminoSigning = "dummy";
+  enables = 0;
   granted: string[] = [];
   locked = false;
   keyReads = 0;
@@ -51,7 +66,10 @@ export class FakeProvider implements ZuniaProvider {
   }
 
   async enable(chainIds: string | string[]): Promise<void> {
+    this.enables += 1;
     if (this.enableError) throw Object.assign(new Error(this.enableError.message), { code: this.enableError.code });
+    // Like the extension: enable waits for the unlock window, then checks the grant.
+    this.locked = false;
     for (const id of typeof chainIds === "string" ? [chainIds] : chainIds) if (!this.granted.includes(id)) this.granted.push(id);
   }
 
@@ -80,7 +98,10 @@ export class FakeProvider implements ZuniaProvider {
   }
 
   async signAmino(_chainId: string, _signer: string, signDoc: StdSignDoc): Promise<unknown> {
-    return { signed: signDoc, signature: this.signatureFor(new Uint8Array(32)) };
+    if (this.aminoSigning === "dummy") return { signed: signDoc, signature: this.signatureFor(new Uint8Array(32)) };
+    const bytes =
+      this.aminoSigning === "escaped" ? serializeAminoSignDoc(signDoc) : utf8ToBytes(JSON.stringify(sortKeysDeep(signDoc)));
+    return { signed: signDoc, signature: this.signatureFor(sha256(bytes)) };
   }
 
   async signDirect(_chainId: string, _signer: string, signDoc: unknown): Promise<unknown> {
@@ -106,7 +127,7 @@ export class FakeProvider implements ZuniaProvider {
     this.listeners.get(event)?.delete(listener);
   }
 
-  private signatureFor(digest: Uint8Array): StdSignature {
+  protected signatureFor(digest: Uint8Array): StdSignature {
     return {
       pub_key: { type: "tendermint/PubKeySecp256k1", value: bytesToBase64(this.pubKey) },
       signature: bytesToBase64(secp256k1.sign(digest, this.secret, { prehash: false })),

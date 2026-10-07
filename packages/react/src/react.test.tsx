@@ -31,7 +31,33 @@ function Probe({ session }: { session: ZuniaSessionImpl }) {
   );
 }
 
+function LockProbe({ session }: { session: ZuniaSessionImpl }) {
+  const zunia = useZuniaSession({ session, restore: false });
+  return (
+    <p>
+      {zunia.status}|{zunia.locked ? "locked" : "open"}|{zunia.accounts.length}|{typeof zunia.unlock}
+    </p>
+  );
+}
+
 describe("useZuniaSession", () => {
+  it("says locked after a locked restore, and unlock() brings the accounts", async () => {
+    let locked = true;
+    const p: ZuniaProvider = {
+      ...provider(),
+      getConnectedChains: async () => ["cosmoshub-4"],
+      isLocked: async () => locked,
+      enable: async () => {
+        locked = false;
+      },
+    };
+    const session = new ZuniaSessionImpl({ extension: { provider: p } });
+    assert.equal(await session.restore({ storage: null }), true);
+    assert.equal(renderToStaticMarkup(<LockProbe session={session} />), "<p>locked|locked|0|function</p>");
+    await session.unlock();
+    assert.equal(renderToStaticMarkup(<LockProbe session={session} />), "<p>connected|open|1|function</p>");
+  });
+
   it("renders the session's state", async () => {
     const session = new ZuniaSessionImpl({ extension: { provider: provider() } });
     assert.equal(renderToStaticMarkup(<Probe session={session} />), "<p>idle|no||</p>");

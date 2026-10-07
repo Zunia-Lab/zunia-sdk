@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Secp256k1HdWallet, makeSignDoc, serializeSignDoc } from "@cosmjs/amino";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToBase64, utf8ToBytes } from "./encoding.js";
@@ -8,6 +9,7 @@ import { buildSignInMessage } from "./sign-in.js";
 import type { StdSignature } from "./types.js";
 import {
   adr36SignDoc,
+  checkAminoSignature,
   pubkeyToAddress,
   serializeAminoSignDoc,
   verifyAdr36Signature,
@@ -67,6 +69,13 @@ describe("ADR-036", () => {
     assert.equal(new TextDecoder().decode(serializeAminoSignDoc({ memo: "<a&b>" })), '{"memo":"\\u003ca\\u0026b\\u003e"}');
   });
 
+  it("escapes U+2028 and U+2029 as the chain does, and leaves other text as it is", () => {
+    // Go's json.Marshal writes both separators escaped in every string; CosmJS does not.
+    const text = new TextDecoder().decode(serializeAminoSignDoc({ memo: "a\u2028b\u2029c · ünï 🙂 \\u2028" }));
+    assert.equal(text, '{"memo":"a\\u2028b\\u2029c · ünï 🙂 \\\\u2028"}');
+    assert.equal(new TextDecoder().decode(serializeAminoSignDoc({ memo: "&<>\u2028" })), '{"memo":"\\u0026\\u003c\\u003e\\u2028"}');
+  });
+
   it("derives addresses from compressed keys", () => {
     assert.match(address, /^cosmos1[02-9ac-hj-np-z]{38}$/);
     assert.equal(pubkeyToAddress(pubKey, "osmo").startsWith("osmo1"), true);
@@ -121,5 +130,44 @@ describe("verifySignIn", () => {
     const signed = message();
     const shown = message({ statement: "Something else." });
     assert.equal(refusal({ ...options(shown), signature: sign(signed) }), "INVALID_SIGNATURE");
+  });
+});
+
+describe("checkAminoSignature against CosmJS", () => {
+  // The public BIP39 test phrase: nobody keeps funds behind it.
+  const wallet = Secp256k1HdWallet.fromMnemonic("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+  const fee = { amount: [{ denom: "uatom", amount: "5000" }], gas: "200000" };
+  const doc = (from: string, memo: string, body = "{}") =>
+    makeSignDoc(
+      [
+        { type: "cosmos-sdk/MsgSend", value: { from_address: from, to_address: from, amount: [{ denom: "uatom", amount: "1" }] } },
+        { type: "wasm/MsgExecuteContract", value: { sender: from, contract: from, msg: JSON.parse(body), funds: [] } },
+      ],
+      fee,
+      "cosmoshub-4",
+      memo,
+      7,
+      3,
+    );
+
+  it("reads a CosmJS signature over a document without U+2028 or U+2029 as valid, & < > included", async () => {
+    const signer = await wallet;
+    const [account] = await signer.getAccounts();
+    assert.ok(account);
+    for (const signDoc of [doc(account.address, "rent & food <3>", '{"transfer_nft":{"token_id":"rock & roll"}}'), doc(account.address, "")]) {
+      assert.deepEqual(serializeAminoSignDoc(signDoc), serializeSignDoc(signDoc), "the same bytes as CosmJS");
+      const { signed, signature } = await signer.signAmino(account.address, signDoc);
+      assert.equal(checkAminoSignature(signed, signature), "valid");
+    }
+  });
+
+  it("reads a CosmJS signature over U+2028 as unescaped: the chain writes it \\u2028", async () => {
+    const signer = await wallet;
+    const [account] = await signer.getAccounts();
+    assert.ok(account);
+    for (const memo of ["line\u2028break", "a & b\u2029"]) {
+      const { signed, signature } = await signer.signAmino(account.address, doc(account.address, memo));
+      assert.equal(checkAminoSignature(signed, signature), "unescaped", JSON.stringify(memo));
+    }
   });
 });

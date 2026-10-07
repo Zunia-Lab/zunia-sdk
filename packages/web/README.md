@@ -91,12 +91,22 @@ The message names `location.host` and expires after 10 minutes unless you pass `
 ```ts
 import { SigningStargateClient } from "@cosmjs/stargate";
 
-const signer = session.getOfflineSigner("cosmoshub-4"); // Direct and Amino
+const messages = [
+  {
+    typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+    value: { fromAddress: account.address, toAddress: recipient, amount: [{ denom: "uatom", amount: "1000" }] },
+  },
+];
+const signer = session.getOfflineSignerFor("cosmoshub-4", { messages, memo });
 const client = await SigningStargateClient.connectWithSigner(rpcUrl, signer);
-await client.sendTokens(account.address, recipient, [{ denom: "uatom", amount: "1000" }], "auto");
+await client.signAndBroadcast(account.address, messages, "auto", memo);
 ```
 
-`getOfflineSignerOnlyAmino(chainId)`, `signAmino`, `signDirect` and `signArbitrary` are there too. Results use `Uint8Array` and `bigint` on every transport, as CosmJS expects.
+CosmJS signs Direct whenever its signer can. `getOfflineSignerFor` hands it the signer for these messages: Amino-only when the Zunia extension connected can only sign them in Amino (a contract call, or a send to a 32-byte address, on Zunia 0.1.4 or older), the full signer everywhere else, and for everything from Zunia 0.1.5. `session.capabilities` says what the connected extension can sign (`null` on other transports); see [`zuniaCapabilities`](https://www.npmjs.com/package/@zunialab/sdk-core#what-a-zunia-extension-can-sign).
+
+`getOfflineSigner(chainId)` (Direct and Amino), `getOfflineSignerOnlyAmino(chainId)`, `signAmino`, `signDirect` and `signArbitrary` are there too. Results use `Uint8Array` and `bigint` on every transport, as CosmJS expects.
+
+On the extension, an Amino signature the chain would refuse because Zunia 0.1.4 or older did not escape `&`, `<` or `>` in it is stopped before anything is broadcast: `UNSUPPORTED`, with `reason: "amino-escaping"`. `explainZuniaError(error)` puts any failure in words for your UI.
 
 `session.suggestChain(chain)` asks the extension to add a chain it does not already know. The wallet shows the endpoints and asks before it saves anything. QR and WalletConnect sessions cannot add chains.
 
@@ -121,6 +131,10 @@ Status is one of `idle`, `connecting`, `awaiting_wallet` (waiting for a scan or 
 
 For UI stores, `session.subscribe(listener)` and `session.getSnapshot()` work with React's `useSyncExternalStore` and similar.
 
+### A locked wallet
+
+A restore never opens the extension's unlock window by itself. When it finds Zunia locked, the status is `locked` and `accounts` stays empty until the user unlocks. `session.unlock()` opens the unlock window (call it from a click), reads the accounts again and keeps your site's grant. CosmJS's first `getAccounts` through a session signer unlocks the same way, so a transaction started while locked goes through. Calling `connect()` again over a live extension session does not revoke the grant either.
+
 ## When the network drops
 
 Over QR pairing, the session pings the relay every 20 seconds, reopens the link with backoff when it goes quiet, and resends requests the relay had not confirmed. The wallet ignores duplicates. Each request times out after 5 minutes (`requestTimeoutMs`). If the relay no longer knows the session, the session ends with `SESSION_EXPIRED` and the user pairs again.
@@ -137,7 +151,7 @@ Any script running on your origin can read these, as with any session token: kee
 
 ## Extension helpers
 
-`getZunia()` waits for the extension to inject `window.zunia` (it dispatches `zunia#initialized`) and resolves `undefined` when it is not installed. `isZuniaInstalled()` checks synchronously. The Keplr-compatible alias `window.keplr` is only used with `getZunia({ preferAlias: true })`.
+`getZunia()` waits for the extension to inject `window.zunia` (it dispatches `zunia#initialized`) and resolves `undefined` when it is not installed. `isZuniaInstalled()` checks synchronously. The Keplr-compatible alias `window.keplr` is only used with `getZunia({ preferAlias: true })`, and only when it says it is Zunia (`isZunia`): without `window.zunia`, a `window.keplr` belongs to another wallet.
 
 ## Connect with Zunia button
 

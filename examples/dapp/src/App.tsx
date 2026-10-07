@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import type { ZuniaTransportKind } from "@zunialab/sdk-core";
-import { ConnectPairingModal, useZuniaSession } from "@zunialab/sdk-react";
+import { ConnectPairingModal, useZuniaSession, type UseZuniaSessionResult } from "@zunialab/sdk-react";
 import { AminoPanel, MessagePanel, SuggestChainPanel } from "./Approvals";
 import { CHAIN, METADATA, RELAY_API, SESSION_OPTIONS, WALLETCONNECT_PROJECT_ID } from "./config";
 import { EventLog } from "./EventLog";
 import { SendPanel } from "./SendPanel";
 import { SignInPanel } from "./SignInPanel";
 import { describeError, useEventLog } from "./useEventLog";
+
+declare global {
+  interface Window {
+    /** Development builds only: the session, for end-to-end tests that sign through it the way a dApp's CosmJS code does. */
+    zuniaExample?: { session: UseZuniaSessionResult["session"] };
+  }
+}
 
 const TRANSPORTS: { kind: ZuniaTransportKind; label: string; hint: string }[] = [
   { kind: "extension", label: "Browser extension", hint: "Zunia installed in this browser" },
@@ -28,6 +35,15 @@ export function App() {
     if (zunia.connected) setPairingOpen(false);
   }, [zunia.connected]);
 
+  // zunia-e2e drives `getOfflineSignerFor` through this. Production builds drop it.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.zuniaExample = { session: zunia.session };
+    return () => {
+      delete window.zuniaExample;
+    };
+  }, [zunia.session]);
+
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2_500);
@@ -47,6 +63,15 @@ export function App() {
       await zunia.connect({ ...SESSION_OPTIONS, prefer, metadata: METADATA, openInstallIfMissing: false });
     } catch {
       // Already shown: the session emits an error event and puts it in its snapshot.
+    }
+  }
+
+  async function unlock() {
+    try {
+      // Opens Zunia's unlock window and keeps this site's grant.
+      await zunia.unlock();
+    } catch (failure) {
+      log.add("unlock failed", describeError(failure));
     }
   }
 
@@ -95,7 +120,14 @@ export function App() {
                 </li>
               ))}
             </ul>
-            {zunia.status === "locked" && <p className="muted">The wallet is locked. Requests wait until you unlock it.</p>}
+            {zunia.locked && (
+              <>
+                <p className="muted">The wallet is locked. Unlock it here; a signature request asks you to unlock too.</p>
+                <button type="button" onClick={() => void unlock()} data-testid="unlock">
+                  Unlock
+                </button>
+              </>
+            )}
             <button type="button" onClick={() => void zunia.disconnect()} data-testid="disconnect">
               Disconnect
             </button>

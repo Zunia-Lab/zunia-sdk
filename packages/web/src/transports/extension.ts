@@ -1,6 +1,8 @@
 import {
   ZuniaConnectError,
   accountFromKey,
+  checkAminoSignature,
+  zuniaCapabilities,
   normalizeAminoResponse,
   normalizeChainIds,
   normalizeDirectResponse,
@@ -15,6 +17,7 @@ import {
   type StdSignature,
   type SuggestedChain,
   type ZuniaAccountInfo,
+  type ZuniaCapabilities,
   type ZuniaProvider,
   type ZuniaSessionEvents,
   type ZuniaSessionStatus,
@@ -129,11 +132,17 @@ export class ExtensionTransport implements ZuniaTransport {
     return true;
   }
 
+  /**
+   * Ends the session. Revokes the site's grant in the extension, except when the
+   * session is only being replaced by a new connect to the same extension (to
+   * unlock it, or to add chains): revoking then would show the approval again.
+   */
   async disconnect(reason = "user"): Promise<void> {
     const provider = this.provider;
     const chains = this.chains;
     if (!provider) return;
     this.end(reason);
+    if (reason === "replaced") return;
     try {
       await provider.disable?.(chains);
     } catch {
@@ -141,14 +150,49 @@ export class ExtensionTransport implements ZuniaTransport {
     }
   }
 
-  async signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse> {
+  /**
+   * From `locked`: `enable` on chains already granted opens only Zunia's unlock
+   * window (no approval), so call this from a click. Resolves once unlocked and
+   * the accounts are read again; rejects `LOCKED` when the user closes it.
+   */
+  async unlock(): Promise<void> {
     const provider = this.requireProvider();
-    if (!provider.signAmino) throw new ZuniaConnectError("UNSUPPORTED", "This extension cannot sign Amino documents");
+    const chains = this.getChains();
     try {
-      return normalizeAminoResponse(await provider.signAmino(chainId, signer, signDoc), signDoc);
+      await provider.enable(chains);
+      await this.loadAccounts();
     } catch (error) {
       throw toZuniaConnectError(error);
     }
+    if (this.provider === provider) this.setStatus("connected");
+  }
+
+  /** What the connected Zunia build can sign, from what its provider reports. */
+  capabilities(): ZuniaCapabilities | null {
+    return this.provider ? zuniaCapabilities(this.provider) : null;
+  }
+
+  async signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse> {
+    const provider = this.requireProvider();
+    if (!provider.signAmino) throw new ZuniaConnectError("UNSUPPORTED", "This extension cannot sign Amino documents");
+    let response: AminoSignResponse;
+    try {
+      response = normalizeAminoResponse(await provider.signAmino(chainId, signer, signDoc), signDoc);
+    } catch (error) {
+      throw toZuniaConnectError(error);
+    }
+    // Zunia 0.1.0 to 0.1.4 sign `&<>` (and U+2028, U+2029) unescaped: the chain
+    // would refuse the transaction after the user approved it. Say so now,
+    // before any broadcast.
+    if (checkAminoSignature(response.signed, response.signature) === "unescaped") {
+      throw new ZuniaConnectError(
+        "UNSUPPORTED",
+        "This Zunia version signed &, <, > or a line separator without the escaping the chain applies; the chain would refuse this signature",
+        undefined,
+        "amino-escaping",
+      );
+    }
+    return response;
   }
 
   async signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse> {

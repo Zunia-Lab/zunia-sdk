@@ -21,13 +21,18 @@ function getWalletWindow(): WalletWindow | undefined {
 }
 
 /**
- * Synchronous read of `window.zunia`. `window.keplr` is only used when asked,
- * since it usually belongs to the Keplr extension.
+ * Synchronous read of `window.zunia`. Zunia always sets `window.zunia`, and
+ * `window.keplr` only as an extra alias, so a `window.keplr` without
+ * `window.zunia` is another wallet (Keplr, or a wallet imitating it): with
+ * `preferAlias` it is used only when it says it is Zunia (`isZunia`).
  */
 export function getZuniaSync(options?: { preferAlias?: boolean }): ZuniaProvider | undefined {
   const w = getWalletWindow();
   if (!w) return undefined;
-  return w[ZUNIA_PROVIDER_GLOBAL] ?? (options?.preferAlias ? w[ZUNIA_KEPLR_ALIAS_GLOBAL] : undefined);
+  const own = w[ZUNIA_PROVIDER_GLOBAL];
+  if (own) return own;
+  const alias = options?.preferAlias ? w[ZUNIA_KEPLR_ALIAS_GLOBAL] : undefined;
+  return alias?.isZunia === true ? alias : undefined;
 }
 
 export interface GetZuniaOptions {

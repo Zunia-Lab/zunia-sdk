@@ -856,7 +856,7 @@ const FAILURE_MESSAGES: Readonly<Record<TxFailureKind, string>> = {
   "already-in-mempool":
     "This exact transaction is already waiting to be included. Do not send it again.",
   unauthorized:
-    "The chain rejected the signature. The account's key or sequence has changed since it was signed.",
+    "The chain rejected the signature. The account's key or sequence has changed since it was signed, or the wallet signed different bytes than the chain checks.",
   "tx-timeout":
     "The transaction's timeout height passed before it was included. Nothing was spent; sign again.",
   unknown: "The chain rejected the transaction.",

@@ -677,6 +677,18 @@ test("classifyTxFailure decodes the codes a wallet actually meets", () => {
       ?.expectedSequence,
     "8",
   );
+
+  // A wallet that signs other bytes than the chain rebuilds (an Amino document
+  // without the chain's escaping) fails the same way.
+  const unauthorized = classifyTxFailure(
+    4,
+    "signature verification failed; please verify account number (7), sequence (3) and chain-id (cosmoshub-4): unauthorized",
+  );
+  assert.equal(unauthorized?.kind, "unauthorized");
+  assert.match(
+    unauthorized?.message ?? "",
+    /or the wallet signed different bytes than the chain checks\.$/,
+  );
 });
 
 test("classifyTxFailure does not read sdk codes in another codespace", () => {

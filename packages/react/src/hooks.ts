@@ -50,8 +50,14 @@ export interface UseZuniaSessionOptions extends ZuniaSessionOptions {
 
 export interface UseZuniaSessionResult extends ZuniaSessionSnapshot {
   session: ZuniaSessionImpl;
-  /** Connected, possibly locked. Accounts are known. */
+  /**
+   * Connected, possibly locked. After a restore that found the wallet locked the
+   * accounts are not known yet: `locked` is true and `accounts` is empty until
+   * `unlock()` (or the user unlocking in the wallet).
+   */
   connected: boolean;
+  /** The extension is connected but locked. Offer `unlock` on a click. */
+  locked: boolean;
   /** Waiting for the extension prompt or for a phone to scan. */
   connecting: boolean;
   /** The mount-time restore is still running. */
@@ -59,6 +65,8 @@ export interface UseZuniaSessionResult extends ZuniaSessionSnapshot {
   connect: (options: ZuniaWebConnectOptions) => Promise<void>;
   disconnect: () => Promise<void>;
   restore: (options?: ZuniaWebRestoreOptions) => Promise<boolean>;
+  /** Asks the wallet to unlock and keeps the site's grant. Opens a window: call it from a click. */
+  unlock: () => Promise<void>;
   signIn: (options: SignInOptions) => Promise<SignInResult>;
 }
 
@@ -90,6 +98,7 @@ export function useZuniaSession(options: UseZuniaSessionOptions = {}): UseZuniaS
   const connect = useCallback((connectOptions: ZuniaWebConnectOptions) => session.connect(connectOptions), [session]);
   const disconnect = useCallback(() => session.disconnect(), [session]);
   const restore = useCallback((restoreOptions?: ZuniaWebRestoreOptions) => session.restore(restoreOptions), [session]);
+  const unlock = useCallback(() => session.unlock(), [session]);
   const signIn = useCallback((signInOptions: SignInOptions) => session.signIn(signInOptions), [session]);
 
   return useMemo(
@@ -97,13 +106,15 @@ export function useZuniaSession(options: UseZuniaSessionOptions = {}): UseZuniaS
       ...snapshot,
       session,
       connected: snapshot.status === "connected" || snapshot.status === "locked",
+      locked: snapshot.status === "locked",
       connecting: snapshot.status === "connecting" || snapshot.status === "awaiting_wallet",
       restoring,
       connect,
       disconnect,
       restore,
+      unlock,
       signIn,
     }),
-    [snapshot, session, restoring, connect, disconnect, restore, signIn],
+    [snapshot, session, restoring, connect, disconnect, restore, unlock, signIn],
   );
 }

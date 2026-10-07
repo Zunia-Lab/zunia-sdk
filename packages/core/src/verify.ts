@@ -5,15 +5,68 @@ import { bech32 } from "@scure/base";
 import { base64ToBytes, bytesToBase64, utf8ToBytes } from "./encoding.js";
 import { ZuniaSignInError } from "./errors.js";
 import { parseSignInMessage, SIGN_IN_LIMITS, type SignInMessage } from "./sign-in.js";
-import type { StdSignature } from "./types.js";
+import type { StdSignDoc, StdSignature } from "./types.js";
 
-/** CosmJS `serializeSignDoc`: keys sorted recursively, compact JSON, `&<>` escaped. */
+/** `&<>` as Go's `json.Marshal` writes them. CosmJS `serializeSignDoc` and Keplr do the same. */
+function escapeHtml(json: string): string {
+  return json.replace(/&/g, "\\u0026").replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+}
+
+/** U+2028 and U+2029 as Go's `json.Marshal` writes them. CosmJS leaves them as they are. */
+function escapeLineSeparators(json: string): string {
+  return json.replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
+
+/**
+ * The Amino sign bytes the chain rebuilds: keys sorted recursively, compact
+ * JSON, `&<>` written `\u0026` `\u003c` `\u003e`, U+2028 and U+2029 written
+ * `\u2028` `\u2029`, UTF-8. Same bytes as CosmJS `serializeSignDoc` for every
+ * document without U+2028 or U+2029.
+ */
 export function serializeAminoSignDoc(signDoc: unknown): Uint8Array {
-  const json = JSON.stringify(sortKeysDeep(signDoc))
-    .replace(/&/g, "\\u0026")
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e");
-  return utf8ToBytes(json);
+  return utf8ToBytes(escapeLineSeparators(escapeHtml(JSON.stringify(sortKeysDeep(signDoc)))));
+}
+
+/**
+ * What an Amino signature is over, checked before anything is broadcast:
+ * - `valid`: the bytes the chain rebuilds (`serializeAminoSignDoc` of `signed`);
+ * - `unescaped`: the same document with some of that escaping skipped: all of it
+ *   (Zunia extension 0.1.0 to 0.1.4), or U+2028 and U+2029 (CosmJS). The chain
+ *   escapes them, so it will refuse this signature;
+ * - `invalid`: neither;
+ * - `unchecked`: not a compressed secp256k1 Cosmos key (an Ethereum key hashes with keccak).
+ */
+export type AminoSignatureCheck = "valid" | "unescaped" | "invalid" | "unchecked";
+
+export function checkAminoSignature(signed: StdSignDoc, signature: StdSignature): AminoSignatureCheck {
+  if (signature?.pub_key?.type !== "tendermint/PubKeySecp256k1") return "unchecked";
+  let pubKey: Uint8Array;
+  let sig: Uint8Array;
+  try {
+    pubKey = base64ToBytes(signature.pub_key.value);
+    sig = base64ToBytes(signature.signature);
+  } catch {
+    return "unchecked";
+  }
+  // Some wallets append a recovery byte.
+  if (sig.length === 65) sig = sig.subarray(0, 64);
+  if (pubKey.length !== 33 || sig.length !== 64) return "unchecked";
+  const verifies = (bytes: Uint8Array): boolean => {
+    try {
+      return secp256k1.verify(sig, sha256(bytes), pubKey, { prehash: false });
+    } catch {
+      return false;
+    }
+  };
+  const json = JSON.stringify(sortKeysDeep(signed));
+  const chain = utf8ToBytes(escapeLineSeparators(escapeHtml(json)));
+  if (verifies(chain)) return "valid";
+  // Escaping only ever lengthens: same length means nothing needed it, so the same bytes.
+  for (const skipped of new Set([json, escapeHtml(json)])) {
+    const bytes = utf8ToBytes(skipped);
+    if (bytes.length !== chain.length && verifies(bytes)) return "unescaped";
+  }
+  return "invalid";
 }
 
 function sortKeysDeep(value: unknown): unknown {

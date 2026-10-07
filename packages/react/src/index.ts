@@ -25,12 +25,22 @@ export type {
   ZuniaWebConnectOptions,
   ZuniaWebRestoreOptions,
 } from "@zunialab/sdk-web";
-export { ZUNIA_CONNECT_BUTTON, ZUNIA_NATIVE_CONNECT, ZuniaConnectError, createNonce } from "@zunialab/sdk-core";
+export {
+  ZUNIA_CONNECT_BUTTON,
+  ZUNIA_NATIVE_CONNECT,
+  ZuniaConnectError,
+  createNonce,
+  explainZuniaError,
+  zuniaCapabilities,
+  zuniaSignMode,
+} from "@zunialab/sdk-core";
 export type {
   SignInOptions,
   SignInResult,
   ZuniaAccountInfo,
+  ZuniaCapabilities,
   ZuniaConnectErrorCode,
+  ZuniaErrorExplanation,
   ZuniaPairing,
   ZuniaProvider,
   ZuniaSessionStatus,

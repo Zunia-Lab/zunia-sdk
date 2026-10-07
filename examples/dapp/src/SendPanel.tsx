@@ -6,7 +6,12 @@ import { describeError, type EventLogApi } from "./useEventLog";
 // CosmJS is most of the bundle, so it loads when first needed.
 const loadCosmJs = () => import("@cosmjs/stargate");
 
-/** A plain CosmJS bank send. The session's offline signer is all CosmJS needs. */
+/**
+ * A plain CosmJS bank send. `getOfflineSignerFor` hands CosmJS the signer for
+ * these messages: Amino-only where the connected wallet can only sign them that
+ * way (a send to a 32-byte address on Zunia 0.1.4 or older), the full signer
+ * everywhere else.
+ */
 export function SendPanel({ zunia, log }: { zunia: UseZuniaSessionResult; log: EventLogApi }) {
   const account = zunia.accounts.find((candidate) => candidate.chainId === CHAIN.chainId);
   const [recipient, setRecipient] = useState("");
@@ -45,7 +50,11 @@ export function SendPanel({ zunia, log }: { zunia: UseZuniaSessionResult; log: E
     setError(undefined);
     try {
       const { GasPrice, SigningStargateClient, assertIsDeliverTxSuccess } = await loadCosmJs();
-      const signer = zunia.session.getOfflineSigner(CHAIN.chainId);
+      const message = {
+        typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+        value: { fromAddress: address, toAddress: recipient.trim(), amount: [{ denom: CHAIN.denom, amount: amount.trim() }] },
+      };
+      const signer = zunia.session.getOfflineSignerFor(CHAIN.chainId, { messages: [message], memo });
       const client = await SigningStargateClient.connectWithSigner(CHAIN.rpc, signer, { gasPrice: GasPrice.fromString(CHAIN.gasPrice) });
       // A new address is not an error. CosmJS refuses to sign until the chain
       // has an account; the first transaction uses account 0, sequence 0.
@@ -55,7 +64,7 @@ export function SendPanel({ zunia, log }: { zunia: UseZuniaSessionResult; log: E
         if (!account) return { accountNumber: 0n, sequence: 0 };
         return { accountNumber: account.accountNumber, sequence: account.sequence };
       };
-      const result = await client.sendTokens(address, recipient.trim(), [{ denom: CHAIN.denom, amount: amount.trim() }], "auto", memo);
+      const result = await client.signAndBroadcast(address, [message], "auto", memo);
       client.disconnect();
       assertIsDeliverTxSuccess(result);
       setSent({ hash: result.transactionHash, height: result.height });

@@ -88,12 +88,14 @@ No transaction, no fee. The wallet refuses to sign a message whose domain does n
 
 ## Send a transaction
 
-The session hands CosmJS a regular offline signer:
+The session hands CosmJS a regular offline signer, picked for the messages you are about to sign, so a contract call reaches the Zunia extension in a mode that build can sign:
 
 ```ts
 import { SigningStargateClient } from "@cosmjs/stargate";
 
-const client = await SigningStargateClient.connectWithSigner(rpc, zunia.session.getOfflineSigner("cosmoshub-4"));
+const signer = zunia.session.getOfflineSignerFor("cosmoshub-4", { messages, memo });
+const client = await SigningStargateClient.connectWithSigner(rpc, signer);
+await client.signAndBroadcast(address, messages, "auto", memo);
 ```
 
 ## Example

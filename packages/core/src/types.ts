@@ -113,7 +113,14 @@ export interface ZuniaProviderError extends Error {
 
 /** The provider the Zunia extension injects as `window.zunia` (and `window.keplr`). */
 export interface ZuniaProvider {
+  /** Provider API version. Zunia 0.1.0 to 0.1.4 all answer "0.1.0": use `zuniaCapabilities`. */
   readonly version: string;
+  /** The extension's own (manifest) version, from Zunia 0.1.5. */
+  readonly extensionVersion?: string;
+  /** What this build can sign (`ZUNIA_SIGNING_FEATURES`), from Zunia 0.1.5. */
+  readonly features?: readonly string[];
+  /** True on Zunia's provider, also when it is aliased as `window.keplr`. */
+  readonly isZunia?: boolean;
   readonly mode: "extension" | "mobile" | "core" | "unknown";
   enable(chainIds: string | string[]): Promise<void>;
   disable?(chainIds?: string | string[]): Promise<void>;

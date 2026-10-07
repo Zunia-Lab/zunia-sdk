@@ -33,14 +33,25 @@ export {
   ZUNIA_PROVIDER_ERROR_CODES,
   ZuniaConnectError,
   ZuniaSignInError,
+  explainZuniaError,
   isZuniaProviderErrorCode,
   toZuniaConnectError,
 } from "./errors.js";
 export type {
   ZuniaConnectErrorCode,
+  ZuniaErrorExplanation,
+  ZuniaErrorReason,
   ZuniaProviderErrorCode,
   ZuniaSignInErrorCode,
 } from "./errors.js";
+
+export {
+  ZUNIA_SIGNING_FEATURES,
+  aminoNeedsEscaping,
+  zuniaCapabilities,
+  zuniaSignMode,
+} from "./signing.js";
+export type { SignableMessage, ZuniaCapabilities, ZuniaSignModeInput } from "./signing.js";
 
 export {
   SIGN_IN_LIMITS,
@@ -54,12 +65,13 @@ export type { SignInBinding, SignInFields, SignInMessage } from "./sign-in.js";
 
 export {
   adr36SignDoc,
+  checkAminoSignature,
   pubkeyToAddress,
   serializeAminoSignDoc,
   verifyAdr36Signature,
   verifySignIn,
 } from "./verify.js";
-export type { VerifiedSignIn, VerifySignInOptions } from "./verify.js";
+export type { AminoSignatureCheck, VerifiedSignIn, VerifySignInOptions } from "./verify.js";
 
 export {
   CONNECT_V2,
@@ -108,6 +120,7 @@ export { normalizeChainIds } from "./session.js";
 export type {
   ConnectOptions,
   RestoreOptions,
+  SignerForOptions,
   SignInOptions,
   SignInResult,
   SuggestedChain,

@@ -5,16 +5,19 @@ import {
   keyFromAccount,
   normalizeChainIds,
   toZuniaConnectError,
+  zuniaSignMode,
   type AccountData,
   type AminoSignResponse,
   type DirectSignResponse,
   type SignDocInput,
+  type SignerForOptions,
   type SignInOptions,
   type SignInResult,
   type StdSignDoc,
   type StdSignature,
   type SuggestedChain,
   type ZuniaAccountInfo,
+  type ZuniaCapabilities,
   type ZuniaKey,
   type ZuniaOfflineSigner,
   type ZuniaPairing,
@@ -129,8 +132,6 @@ export class ZuniaSessionImpl implements ZuniaSession {
     if (normalizeChainIds(options.chains).length === 0) {
       throw new ZuniaConnectError("INVALID_PARAMS", "Pass at least one chain id");
     }
-    await this.drop();
-    this.update({ error: undefined, pairing: undefined, verificationCode: undefined });
     let kind: ZuniaTransportKind;
     try {
       kind = await this.pick(options);
@@ -140,6 +141,11 @@ export class ZuniaSessionImpl implements ZuniaSession {
       this.bus.emit("error", failure);
       throw failure;
     }
+    // Connecting the extension again (to unlock it, or to add chains) must not
+    // revoke the site's grant first: the approval would show again. Switching
+    // to another transport still ends the extension session for good.
+    await this.drop(kind === "extension" && this.active?.kind === "extension" ? "replaced" : undefined);
+    this.update({ error: undefined, pairing: undefined, verificationCode: undefined });
     const transport = this.create(kind);
     this.attach(transport);
     try {
@@ -205,10 +211,13 @@ export class ZuniaSessionImpl implements ZuniaSession {
     return keyFromAccount(account);
   }
 
-  /** A CosmJS signer (Direct and Amino) for `SigningStargateClient`. */
+  /**
+   * A CosmJS signer (Direct and Amino) for `SigningStargateClient`. CosmJS signs
+   * Direct with it whenever it has `signDirect`; see `getOfflineSignerFor`.
+   */
   getOfflineSigner(chainId: string): ZuniaOfflineSigner {
     return {
-      getAccounts: async () => this.accountData(chainId),
+      getAccounts: () => this.accountsForSigning(chainId),
       signDirect: (signerAddress, signDoc) => this.signDirect(chainId, signerAddress, signDoc),
       signAmino: (signerAddress, signDoc) => this.signAmino(chainId, signerAddress, signDoc),
     };
@@ -217,9 +226,47 @@ export class ZuniaSessionImpl implements ZuniaSession {
   /** A CosmJS Amino-only signer, for chains or hardware that need Amino JSON. */
   getOfflineSignerOnlyAmino(chainId: string): Pick<ZuniaOfflineSigner, "getAccounts" | "signAmino"> {
     return {
-      getAccounts: async () => this.accountData(chainId),
+      getAccounts: () => this.accountsForSigning(chainId),
       signAmino: (signerAddress, signDoc) => this.signAmino(chainId, signerAddress, signDoc),
     };
+  }
+
+  /**
+   * The CosmJS signer for these messages on the connected wallet. On the Zunia
+   * extension 0.1.4 or older a contract call can only be signed Amino (Direct
+   * refuses 32-byte contracts), so this hands CosmJS the Amino-only signer then;
+   * everywhere else, and from Zunia 0.1.5, the full signer.
+   */
+  getOfflineSignerFor(
+    chainId: string,
+    options: SignerForOptions,
+  ): ZuniaOfflineSigner | Pick<ZuniaOfflineSigner, "getAccounts" | "signAmino"> {
+    if (this.snapshot.transport !== "extension") return this.getOfflineSigner(chainId);
+    const mode = zuniaSignMode({ ...options, capabilities: this.capabilities });
+    return mode === "amino" ? this.getOfflineSignerOnlyAmino(chainId) : this.getOfflineSigner(chainId);
+  }
+
+  /** What the connected Zunia extension can sign; null on other transports. */
+  get capabilities(): ZuniaCapabilities | null {
+    return this.active?.capabilities?.() ?? null;
+  }
+
+  /**
+   * From `locked` (a restore that found the wallet locked): asks the wallet to
+   * unlock and reads the accounts again, keeping the site's grant. The unlock
+   * window opens, so call it from a click.
+   */
+  async unlock(): Promise<void> {
+    const transport = this.active;
+    if (!transport || this.snapshot.status === "disconnected" || this.snapshot.status === "idle") {
+      throw new ZuniaConnectError("NOT_CONNECTED", "Connect a wallet first");
+    }
+    if (!transport.unlock) return;
+    try {
+      await transport.unlock();
+    } catch (error) {
+      throw toZuniaConnectError(error);
+    }
   }
 
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse> {
@@ -266,6 +313,18 @@ export class ZuniaSessionImpl implements ZuniaSession {
     });
     const signature = await this.signArbitrary(chainId, account.address, message);
     return { message, signature, address: account.address, chainId, pubKey: account.pubkey };
+  }
+
+  /**
+   * CosmJS reads the accounts first when it signs. After a restore that found
+   * the wallet locked there are none yet: unlocking here (inside the user's
+   * sign action) is what lets that first transaction go through.
+   */
+  private async accountsForSigning(chainId: string): Promise<AccountData[]> {
+    const accounts = this.accountData(chainId);
+    if (accounts.length > 0 || this.snapshot.status !== "locked") return accounts;
+    await this.unlock();
+    return this.accountData(chainId);
   }
 
   private accountData(chainId: string): AccountData[] {
