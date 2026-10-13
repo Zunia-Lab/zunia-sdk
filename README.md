@@ -20,6 +20,7 @@
 | [`@zunialab/sdk-react`](./packages/react) | React dApps | `useZuniaSession`, the pairing dialog, the Connect with Zunia button |
 | [`@zunialab/sdk-core`](./packages/core) | Servers and wallets | `verifySignIn` for your backend, shared types and errors, the pairing crypto |
 | [`@zunialab/interchain`](./packages/interchain) | Wallets and dApps | IBC routes, denoms, packet-forward memos, packet tracking |
+| [`@zunialab/mcp`](./packages/mcp) | Coding assistants | MCP server: searches the docs, integration guides, live npm versions, chain registry, sign-in checks and IBC helpers. Hosted at `https://docs.zunialab.com/mcp` |
 | [`zunia_sdk`](./flutter/zunia_sdk) | Flutter | Deep links and the Connect with Zunia button. Speaks the older pairing protocol; the v2 client is planned |
 
 ## How a dApp connects
@@ -41,7 +42,7 @@ pnpm add @zunialab/sdk-react @zunialab/sdk-web
 ```tsx
 import { ConnectPairingModal, ConnectWithZuniaButton, useZuniaSession } from "@zunialab/sdk-react";
 
-const options = { chains: ["cosmoshub-4"], apiBase: "https://relay.example.com" };
+const options = { chains: ["cosmoshub-4"], apiBase: "https://api.zunialab.com" };
 
 export function Connect() {
   // Restores the previous session on mount, without a prompt.
@@ -64,7 +65,7 @@ export function Connect() {
 }
 ```
 
-`apiBase` is the relay used for QR pairing. Zunia does not host a public relay yet: run [zunia-backend](https://github.com/Zunia-Lab/zunia-backend) or leave `apiBase` out to offer the extension (and WalletConnect) only.
+`apiBase` is the relay used for QR pairing. Zunia runs one at `https://api.zunialab.com`, open to any site; its source is [zunia-backend](https://github.com/Zunia-Lab/zunia-backend). Leave `apiBase` out to offer the extension (and WalletConnect) only.
 
 ## Sign-in only
 
@@ -117,7 +118,7 @@ Versions and changelogs go through [Changesets](./.changeset/README.md). A `v*` 
 
 ## Docs
 
-[docs.zunialab.com](https://docs.zunialab.com)
+[docs.zunialab.com](https://docs.zunialab.com). For coding assistants: [llms.txt](https://docs.zunialab.com/llms.txt), and the MCP server at `https://docs.zunialab.com/mcp` ([setup](https://docs.zunialab.com/docs/get-started/ai)).
 
 ## License
 

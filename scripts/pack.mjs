@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export const ROOT = resolve(import.meta.dirname, "..");
-export const PACKAGES = ["core", "web", "react", "interchain"];
+export const PACKAGES = ["core", "web", "react", "interchain", "mcp"];
 
 export function run(command, args, options = {}) {
   return execFileSync(command, args, { stdio: "inherit", ...options });
