@@ -326,8 +326,15 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
     },
     async () => {
       const docs = await context.docs.tryLoad();
+      const known: readonly string[] = ZUNIA_PACKAGES;
       const mentioned = docs ? docs.index.pages.flatMap((page) => packagesIn(page.markdown)) : [];
-      const infos = await context.npm.getMany([...new Set<string>([...ZUNIA_PACKAGES, ...mentioned])]);
+      const extra = [...new Set(mentioned)].filter((name) => !known.includes(name));
+      // A package the docs only name in build steps (@zunialab/ui, @zunialab/tokens) is internal:
+      // list it only once it is actually on npm.
+      const infos = [
+        ...(await context.npm.getMany(known)),
+        ...(await context.npm.getMany(extra)).filter((info) => !("error" in info) && info.published),
+      ];
       return reply(
         `Zunia packages, read now from registry.npmjs.org:\n\n${infos.map(packageLine).join("\n")}\n\nThe Flutter package is documented at https://docs.zunialab.com/docs/integrate/flutter.`,
         { packages: infos.map((info) => ({ ...info })) },
