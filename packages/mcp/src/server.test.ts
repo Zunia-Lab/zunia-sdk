@@ -126,6 +126,8 @@ for (const era of ["legacy", "modern"] as const) {
       const packages = result.structuredContent?.packages as { name: string; published?: boolean; latest?: string }[];
       assert.equal(packages.find((info) => info.name === "@zunialab/sdk-web")?.latest, "0.1.1");
       assert.equal(packages.find((info) => info.name === "@zunialab/mcp")?.published, false);
+      // Named in the docs' build steps only, and not on npm: an internal package, not listed.
+      assert.equal(packages.some((info) => info.name === "@zunialab/ui"), false);
       assert.match(textOf(result), /@walletconnect\/sign-client \^2\.17\.0 \(optional\)/);
     });
 

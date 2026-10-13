@@ -48,7 +48,7 @@ export function fixtureIndex(): DocsIndex {
       "reference/sdk",
       "SDK API",
       "Reference",
-      "# SDK API\n\n## Session\n\n`session.getOfflineSignerFor(chainId, { messages, memo })` hands CosmJS a signer.\n",
+      "# SDK API\n\n## Session\n\n`session.getOfflineSignerFor(chainId, { messages, memo })` hands CosmJS a signer.\n\nThe extension build runs `pnpm --filter @zunialab/ui build` first.\n",
       "Three packages, one session.",
     ),
     page(
