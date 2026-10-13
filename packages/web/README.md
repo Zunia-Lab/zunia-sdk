@@ -51,12 +51,12 @@ session.on("verification", (code) => {
   dialog.textContent = `Check that your phone shows ${code.slice(0, 3)} ${code.slice(3)}`;
 });
 
-await session.connect({ ...options, prefer: "native-ws", apiBase: "https://relay.example.com" });
+await session.connect({ ...options, prefer: "native-ws", apiBase: "https://api.zunialab.com" });
 ```
 
 The QR code holds a one-time join token and the dApp's public key. The phone and the page agree on keys (X25519) and encrypt every message (ChaCha20-Poly1305), so the relay only sees ciphertext. The relay checks the page's `Origin` and hands it to the phone, which shows it and binds sign-in messages to it. An unscanned code expires after 10 minutes; a paired session lasts 24 hours.
 
-Zunia does not host a public relay yet. Run [zunia-backend](https://github.com/Zunia-Lab/zunia-backend) and pass its URL as `apiBase`.
+Zunia runs the relay at `https://api.zunialab.com`, open to any site. Its source is [zunia-backend](https://github.com/Zunia-Lab/zunia-backend), if you would rather run your own and pass its URL as `apiBase`.
 
 On a phone browser, link to the app instead of showing a QR code: the pairing URI (`zunia://connect?...`) opens Zunia mobile directly.
 

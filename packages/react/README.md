@@ -15,7 +15,7 @@ import { ConnectPairingModal, ConnectWithZuniaButton, useZuniaSession } from "@z
 
 const options = {
   chains: ["cosmoshub-4"],
-  apiBase: "https://relay.example.com", // QR pairing with Zunia mobile, optional
+  apiBase: "https://api.zunialab.com", // the Zunia relay, for QR pairing with Zunia mobile; optional
 };
 
 export function Wallet() {
