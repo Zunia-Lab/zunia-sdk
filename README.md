@@ -21,7 +21,7 @@
 | [`@zunialab/sdk-core`](./packages/core) | Servers and wallets | `verifySignIn` for your backend, shared types and errors, the pairing crypto |
 | [`@zunialab/interchain`](./packages/interchain) | Wallets and dApps | IBC routes, denoms, packet-forward memos, packet tracking |
 | [`@zunialab/mcp`](./packages/mcp) | Coding assistants | MCP server: searches the docs, integration guides, live npm versions, chain registry, sign-in checks and IBC helpers. Hosted at `https://docs.zunialab.com/mcp` |
-| [`zunia_sdk`](./flutter/zunia_sdk) | Flutter | Deep links and the Connect with Zunia button. Speaks the older pairing protocol; the v2 client is planned |
+| [`zunia_sdk`](./flutter/zunia_sdk) ([pub.dev](https://pub.dev/packages/zunia_sdk)) | Flutter apps | QR pairing and same-phone deep links to Zunia mobile (zunia.connect.v2), Direct/Amino/ADR-036 signing, sign-in on Flutter web, session restore, pairing and QR widgets |
 
 ## How a dApp connects
 

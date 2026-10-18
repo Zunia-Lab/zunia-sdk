@@ -95,7 +95,7 @@ export const OSMOSIS = {
   features: ["cosmwasm"],
 };
 
-/** Answers npm and the chain registry from memory, and counts what was asked. */
+/** Answers npm, pub.dev and the chain registry from memory, and counts what was asked. */
 export function fakeUpstreams(): { fetch: FetchLike; calls: string[] } {
   const calls: string[] = [];
   const json = (body: unknown, status = 200) =>
@@ -121,6 +121,20 @@ export function fakeUpstreams(): { fetch: FetchLike; calls: string[] } {
       return json({ "dist-tags": { latest: "0.1.1" }, versions: { "0.1.1": { description: "A Zunia SDK package" } } });
     }
     if (url.startsWith("https://registry.npmjs.org/")) return json({ error: "Not found" }, 404);
+    if (url === "https://pub.dev/api/packages/zunia_sdk") {
+      return json({
+        name: "zunia_sdk",
+        latest: {
+          version: "0.1.1",
+          published: "2026-10-18T12:00:00.000Z",
+          pubspec: {
+            description: "Connect Flutter apps to the Zunia wallet:\n  QR pairing and deep links.",
+            environment: { sdk: "^3.6.0", flutter: ">=3.27.0" },
+          },
+        },
+      });
+    }
+    if (url.startsWith("https://pub.dev/api/packages/")) return json({ error: { code: "NotFound" } }, 404);
     if (url.endsWith("/cosmos/osmosis.json")) return json(OSMOSIS);
     if (url.startsWith("https://raw.githubusercontent.com/")) return new Response("404: Not Found", { status: 404 });
     throw new Error(`unexpected fetch ${url}`);

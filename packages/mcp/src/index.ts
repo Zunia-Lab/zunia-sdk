@@ -14,6 +14,8 @@ export { startHttpServer } from "./http.js";
 export type { HttpServerOptions } from "./http.js";
 export { NpmRegistry, ZUNIA_PACKAGES } from "./npm.js";
 export type { PackageInfo } from "./npm.js";
+export { PubRegistry, ZUNIA_PUB_PACKAGES } from "./pub.js";
+export type { PubPackageInfo } from "./pub.js";
 export { DocsSearch } from "./search.js";
 export type { SearchHit } from "./search.js";
 export {

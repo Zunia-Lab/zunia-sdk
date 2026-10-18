@@ -1,0 +1,53 @@
+name: Publish zunia_sdk to pub.dev
+
+# pub.dev publishes from a tag push only, authenticated by GitHub's OIDC token
+# (no secret to store). The package admin page on pub.dev must list this
+# repository with the tag pattern `zunia_sdk-v{{version}}`.
+on:
+  push:
+    tags: ["zunia_sdk-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: flutter/zunia_sdk
+    steps:
+      - uses: actions/checkout@v4
+      # Sets up the pub.dev credentials from the OIDC token.
+      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Check the tag matches pubspec.yaml
+        run: |
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
+          if [ "zunia_sdk-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "pubspec.yaml is at $version but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      # The first release went up by hand; a tag for a version already on
+      # pub.dev has nothing left to publish.
+      - name: Skip a version pub.dev already has
+        id: published
+        run: |
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
+          if curl -sf https://pub.dev/api/packages/zunia_sdk | grep -q "\"version\":\"$version\""; then
+            echo "zunia_sdk $version is already on pub.dev"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.published.outputs.skip != 'true'
+        run: flutter pub get
+      - if: steps.published.outputs.skip != 'true'
+        run: flutter analyze
+      - if: steps.published.outputs.skip != 'true'
+        run: flutter test
+      - if: steps.published.outputs.skip != 'true'
+        run: flutter pub publish --force

@@ -1,0 +1,20 @@
+name: zunia_sdk_example
+description: Connect a Flutter app to Zunia, then sign a message.
+publish_to: none
+version: 0.1.1
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  zunia_sdk:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

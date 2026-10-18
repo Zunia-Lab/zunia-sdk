@@ -35,6 +35,7 @@ import {
 } from "./docs.js";
 import type { FetchLike } from "./fetch.js";
 import { installCommand, NpmRegistry, type PackageInfo, ZUNIA_PACKAGES } from "./npm.js";
+import { PubRegistry, pubPackageLine, ZUNIA_PUB_PACKAGES } from "./pub.js";
 import { VERSION } from "./version.js";
 
 export interface ZuniaMcpOptions {
@@ -46,6 +47,7 @@ export interface ZuniaMcpOptions {
 export interface ZuniaMcpContext {
   docs: DocsSource;
   npm: NpmRegistry;
+  pub: PubRegistry;
   chains: ChainRegistry;
 }
 
@@ -53,11 +55,12 @@ export function createZuniaMcpContext(options: ZuniaMcpOptions = {}): ZuniaMcpCo
   return {
     docs: new DocsSource({ fetch: options.fetch, ...options.docs }),
     npm: new NpmRegistry({ fetch: options.fetch }),
+    pub: new PubRegistry({ fetch: options.fetch }),
     chains: new ChainRegistry({ fetch: options.fetch }),
   };
 }
 
-export const SERVER_INSTRUCTIONS = `Zunia is a self-custody multi-chain Cosmos wallet: a browser extension that injects window.zunia, a phone app, and a web dashboard (https://app.zunialab.com) that holds no keys. This server answers from the published Zunia docs (https://docs.zunialab.com), npm and the Zunia chain registry, read live.
+export const SERVER_INSTRUCTIONS = `Zunia is a self-custody multi-chain Cosmos wallet: a browser extension that injects window.zunia, a phone app, and a web dashboard (https://app.zunialab.com) that holds no keys. This server answers from the published Zunia docs (https://docs.zunialab.com), npm, pub.dev and the Zunia chain registry, read live.
 
 To add Zunia to a dApp: call list_integrations, then get_integration_guide for the path you need (quickstart, extension, react, sign-in, qr, walletconnect, suggest-chain, flutter...). Call get_sdk_packages before writing an install command, so the versions are the published ones. Use search_docs for anything else and cite the page URL it returns. Use only APIs the docs show; do not invent methods or options.
 
@@ -287,6 +290,7 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
         const infos = names.length ? await context.npm.getMany(names) : [];
         const published = infos.filter((info): info is PackageInfo => !("error" in info));
         const install = written.length ? written.join(" && ") : installCommand(published);
+        const flutter = /\bzunia_sdk\b/.test(page.markdown) ? await context.pub.getMany(ZUNIA_PUB_PACKAGES) : [];
         const related = linkedPages(docs, page)
           .map((linked) => `- ${linked.title}: ${linked.url} (get_doc "${linked.id}")`)
           .join("\n");
@@ -294,6 +298,7 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
           `# Integration guide: ${page.title} (${key})`,
           `URL: ${page.url}\n${builtLine(docs)}`,
           infos.length ? `## Packages, latest on npm\n${infos.map(packageLine).join("\n")}${install ? `\n\nInstall: \`${install}\`` : ""}` : "",
+          flutter.length ? `## Flutter packages, latest on pub.dev\n${flutter.map(pubPackageLine).join("\n")}` : "",
           related ? `## Pages this guide links to\n${related}` : "",
           `## The guide\n\n${page.markdown}`,
         ];
@@ -304,9 +309,9 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
   server.registerTool(
     "get_sdk_packages",
     {
-      title: "Zunia packages on npm",
+      title: "Zunia packages on npm and pub.dev",
       description:
-        "The @zunialab packages, read live from the npm registry: latest version, publish date, description and peer dependencies. Call it before writing an install command or a version range.",
+        "The @zunialab packages, read live from the npm registry (latest version, publish date, description, peer dependencies), and the Flutter package zunia_sdk, read live from pub.dev. Call it before writing an install command or a version range.",
       outputSchema: z.object({
         packages: z.array(
           z.object({
@@ -318,6 +323,8 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
             peerDependencies: z.record(z.string(), z.string()).optional(),
             optionalPeers: z.array(z.string()).optional(),
             npm: z.string().optional(),
+            pub: z.string().optional(),
+            environment: z.record(z.string(), z.string()).optional(),
             error: z.string().optional(),
           }),
         ),
@@ -335,9 +342,10 @@ export async function createZuniaMcpServer(context: ZuniaMcpContext): Promise<Mc
         ...(await context.npm.getMany(known)),
         ...(await context.npm.getMany(extra)).filter((info) => !("error" in info) && info.published),
       ];
+      const flutter = await context.pub.getMany(ZUNIA_PUB_PACKAGES);
       return reply(
-        `Zunia packages, read now from registry.npmjs.org:\n\n${infos.map(packageLine).join("\n")}\n\nThe Flutter package is documented at https://docs.zunialab.com/docs/integrate/flutter.`,
-        { packages: infos.map((info) => ({ ...info })) },
+        `Zunia packages, read now from registry.npmjs.org:\n\n${infos.map(packageLine).join("\n")}\n\nFlutter, read now from pub.dev:\n\n${flutter.map(pubPackageLine).join("\n")}\n\nThe Flutter package is documented at https://docs.zunialab.com/docs/integrate/flutter.`,
+        { packages: [...infos, ...flutter].map((info) => ({ ...info })) },
       );
     },
   );
