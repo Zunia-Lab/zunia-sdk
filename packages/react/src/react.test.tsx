@@ -69,13 +69,25 @@ describe("useZuniaSession", () => {
 describe("ConnectPairingModal", () => {
   const noop = () => {};
 
-  it("shows a real QR code and a link for phones", () => {
+  it("shows a real QR code, and on a computer no app link", () => {
     const html = renderToStaticMarkup(
       <ConnectPairingModal open onOpenChange={noop} status="awaiting_wallet" pairing={{ transport: "native-ws", uri: URI }} />,
     );
     assert.ok(html.includes('aria-label="Pairing QR code"') && html.includes("<path d=\"M"));
-    assert.ok(html.includes(`href="${URI.replace(/&/g, "&amp;")}"`));
+    assert.ok(!html.includes("Open the Zunia app") && !html.includes("href="), "a zunia:// link has nothing to open on a computer");
     assert.ok(html.includes("Scan with the Zunia app"));
+  });
+
+  it("leads with the app link on a phone, carrying the return target, and keeps the QR for another phone", () => {
+    const appUri = `${URI}&ret=${encodeURIComponent("https://app.example.com/swap")}`;
+    const html = renderToStaticMarkup(
+      <ConnectPairingModal open onOpenChange={noop} status="awaiting_wallet" pairing={{ transport: "native-ws", uri: URI, appUri }} showAppLink />,
+    );
+    assert.ok(html.includes(`href="${appUri.replace(/&/g, "&amp;")}"`));
+    assert.ok(html.indexOf("Open the Zunia app") < html.indexOf("Pairing QR code"), "the link comes first");
+    assert.ok(html.includes("or scan the code with Zunia on another one"));
+    assert.equal(pairingDeepLink({ transport: "native-ws", uri: URI, appUri }), appUri);
+    assert.equal(pairingDeepLink({ transport: "native-ws", uri: URI }), URI);
   });
 
   it("switches to the code to compare once the phone has scanned", () => {

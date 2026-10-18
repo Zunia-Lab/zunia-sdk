@@ -96,3 +96,19 @@ export async function enableZunia(chainIds: string | string[], options?: GetZuni
   }
   return zunia;
 }
+
+/**
+ * True in a browser on a phone or tablet, where Zunia mobile may be installed on
+ * the same device: Android, iPhone, iPad (also when iPadOS asks for desktop sites).
+ * On these, the user cannot scan their own screen, so "Open the Zunia app" is the
+ * way to pair.
+ */
+export function isPhoneBrowser(): boolean {
+  const nav = (globalThis as { navigator?: Navigator & { userAgentData?: { mobile?: boolean } } }).navigator;
+  if (!nav) return false;
+  if (nav.userAgentData?.mobile === true) return true;
+  const ua = nav.userAgent ?? "";
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+  // iPadOS asks for desktop sites with a Mac user agent; only touch gives it away.
+  return /Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1;
+}

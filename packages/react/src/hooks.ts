@@ -68,6 +68,11 @@ export interface UseZuniaSessionResult extends ZuniaSessionSnapshot {
   /** Asks the wallet to unlock and keeps the site's grant. Opens a window: call it from a click. */
   unlock: () => Promise<void>;
   signIn: (options: SignInOptions) => Promise<SignInResult>;
+  /**
+   * QR pairing: opens Zunia on this phone (the pairing link, then the wake link for a
+   * waiting request). Call it from a tap. False when there is nothing to open.
+   */
+  openWallet: () => boolean;
 }
 
 /**
@@ -100,6 +105,7 @@ export function useZuniaSession(options: UseZuniaSessionOptions = {}): UseZuniaS
   const restore = useCallback((restoreOptions?: ZuniaWebRestoreOptions) => session.restore(restoreOptions), [session]);
   const unlock = useCallback(() => session.unlock(), [session]);
   const signIn = useCallback((signInOptions: SignInOptions) => session.signIn(signInOptions), [session]);
+  const openWallet = useCallback(() => session.openWallet(), [session]);
 
   return useMemo(
     () => ({
@@ -114,7 +120,8 @@ export function useZuniaSession(options: UseZuniaSessionOptions = {}): UseZuniaS
       restore,
       unlock,
       signIn,
+      openWallet,
     }),
-    [snapshot, session, restoring, connect, disconnect, restore, unlock, signIn],
+    [snapshot, session, restoring, connect, disconnect, restore, unlock, signIn, openWallet],
   );
 }
