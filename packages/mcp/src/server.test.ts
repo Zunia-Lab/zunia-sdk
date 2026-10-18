@@ -129,6 +129,12 @@ for (const era of ["legacy", "modern"] as const) {
       // Named in the docs' build steps only, and not on npm: an internal package, not listed.
       assert.equal(packages.some((info) => info.name === "@zunialab/ui"), false);
       assert.match(textOf(result), /@walletconnect\/sign-client \^2\.17\.0 \(optional\)/);
+      const flutter = packages.find((info) => info.name === "zunia_sdk") as { latest?: string; pub?: string } | undefined;
+      assert.equal(flutter?.latest, "0.1.1");
+      assert.equal(flutter?.pub, "https://pub.dev/packages/zunia_sdk");
+      assert.match(textOf(result), /zunia_sdk 0\.1\.1, published 2026-10-18: Connect Flutter apps to the Zunia wallet: QR pairing and deep links\./);
+      assert.match(textOf(result), /Needs Dart \^3\.6\.0, Flutter >=3\.27\.0/);
+      assert.match(textOf(result), /flutter pub add zunia_sdk/);
     });
 
     test("get_chain and check_address read the chain registry", async () => {

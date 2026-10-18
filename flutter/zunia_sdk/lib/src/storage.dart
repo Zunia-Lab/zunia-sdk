@@ -29,6 +29,9 @@ abstract interface class ZuniaSessionStorage {
 
 /// Keeps the session in memory only: it ends with the app.
 class MemorySessionStorage implements ZuniaSessionStorage {
+  /// Creates an empty store.
+  MemorySessionStorage();
+
   final Map<String, String> _values = {};
 
   @override

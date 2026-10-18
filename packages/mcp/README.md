@@ -1,8 +1,8 @@
 # @zunialab/mcp
 
-An [MCP](https://modelcontextprotocol.io) server for building with the Zunia wallet. It gives coding assistants the Zunia docs, the integration guides, the SDK versions on npm, the Zunia chain registry, and the SDK's own sign-in, error and IBC helpers.
+An [MCP](https://modelcontextprotocol.io) server for building with the Zunia wallet. It gives coding assistants the Zunia docs, the integration guides, the SDK versions on npm and pub.dev, the Zunia chain registry, and the SDK's own sign-in, error and IBC helpers.
 
-It answers from the published docs (`docs-index.json`, written by every docs build), npm and the chain registry, read when asked. Nothing is bundled, so an answer is never older than what is published. It is read-only: it never signs and holds no keys.
+It answers from the published docs (`docs-index.json`, written by every docs build), npm, pub.dev and the chain registry, read when asked. Nothing is bundled, so an answer is never older than what is published. It is read-only: it never signs and holds no keys.
 
 ## Use the hosted server
 
@@ -35,7 +35,7 @@ Node 20 or later.
 | `list_docs` | Every page, grouped as on the site |
 | `list_integrations` | The integration paths (quickstart, extension, React, sign-in, events, QR, WalletConnect, chain suggestion, Flutter, troubleshooting) |
 | `get_integration_guide` | One guide, with its packages at their latest npm version, the install command and the pages it links to |
-| `get_sdk_packages` | The `@zunialab` packages: latest version, publish date, peer dependencies |
+| `get_sdk_packages` | The `@zunialab` packages on npm (latest version, publish date, peer dependencies) and the Flutter package `zunia_sdk` on pub.dev |
 | `get_chain` | A chain's entry in the [Zunia chain registry](https://github.com/Zunia-Lab/zunia-chain-registry) |
 | `check_address` | Whether an address is valid bech32 and carries a chain's exact prefix |
 | `explain_error` | What an error code means and what to do, from `explainZuniaError` |
