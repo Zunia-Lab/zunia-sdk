@@ -15,7 +15,7 @@ import {
   verificationCodeFrom,
 } from "../src/connect-crypto.js";
 import { bytesToBase64Url } from "../src/encoding.js";
-import { buildPairingUri } from "../src/protocol.js";
+import { buildPairingUri, buildWakeUri } from "../src/protocol.js";
 
 const seed = (label: string) => sha256(utf8ToBytes(`zunia.connect.v2 vector ${label}`));
 
@@ -118,7 +118,8 @@ const vectors = {
     "zunia.connect.v2 vectors, shared by the JS SDK and the Dart wallet. Secret keys and nonces are fixed here; real sessions use random ones. " +
     "Keys: X25519, salt SHA-256('zunia.connect.v2' 0x00 sessionId 0x00 dappPublicKey walletPublicKey), HKDF-SHA256 with info " +
     "'zunia.connect.v2 dapp->wallet', 'zunia.connect.v2 wallet->dapp' (32 bytes each) and 'zunia.connect.v2 verification code' (4 bytes, big-endian, mod 1000000, 6 digits). " +
-    "Frames: ChaCha20-Poly1305, 12-byte nonce, associated data 'zunia.connect.v2|<sessionId>|<sender>->...', plaintext the JSON envelope. Binary values are hex, public keys, nonces and ciphertexts unpadded base64url.",
+    "Frames: ChaCha20-Poly1305, 12-byte nonce, associated data 'zunia.connect.v2|<sessionId>|<sender>->...', plaintext the JSON envelope. Binary values are hex, public keys, nonces and ciphertexts unpadded base64url. " +
+    "Pairing links may carry `ret` (returnUrls lists what a wallet follows); wake links carry the session id only.",
   keyAgreement: agreements,
   frames,
   verificationCodes: codes,
@@ -136,6 +137,75 @@ const vectors = {
       `zunia://connect?v=2&sid=short&t=${bytesToBase64Url(seed("join token"))}&pk=${first.dappPublicKey}&r=wss%3A%2F%2Fapi.zunialab.com`,
       `zunia://connect?v=2&sid=${first.sessionId}&t=${bytesToBase64Url(seed("join token"))}&pk=${first.dappPublicKey}&r=https%3A%2F%2Fapi.zunialab.com`,
       `zunia://wc?v=2&sid=${first.sessionId}&t=${bytesToBase64Url(seed("join token"))}&pk=${first.dappPublicKey}&r=wss%3A%2F%2Fapi.zunialab.com`,
+      buildWakeUri(first.sessionId),
+    ],
+    /** Valid links with a `ret` and the return target a wallet reads from each. */
+    withReturn: [
+      "https://app.example.com/swap?pair=1#top",
+      "myapp://zunia/return",
+      "com.example.app:/oauth",
+    ].map((returnUrl) => ({
+      uri: buildPairingUri({
+        sessionId: first.sessionId,
+        joinToken: bytesToBase64Url(seed("join token")),
+        dappPublicKey: first.dappPublicKey,
+        relay: "wss://api.zunialab.com",
+        returnUrl,
+      }),
+      returnUrl,
+    })),
+  },
+  /**
+   * The `ret` parameter: an https: URL with a host, or an app's own scheme that is not
+   * zunia, zuniamobile, wc, javascript, data, file, blob, about, content, intent or http;
+   * RFC 3986 characters only; at most 512 characters. A wallet ignores an invalid one
+   * and still pairs.
+   */
+  returnUrls: {
+    valid: [
+      "https://app.example.com",
+      "https://app.example.com/swap?from=uatom&to=uosmo#review",
+      "myapp://zunia/return",
+      "my-app+dev.v2://done",
+      "com.example.app:/oauth",
+      "fb1234567890://authorize",
+      `https://app.example.com/${"a".repeat(512 - "https://app.example.com/".length)}`,
+    ],
+    invalid: [
+      "",
+      "http://app.example.com",
+      "HTTP://app.example.com",
+      "https://",
+      "https:/no-host",
+      "zunia://connect",
+      "ZuniaMobile://x",
+      "wc:abc@2",
+      "javascript:alert(1)",
+      "data:text/html,hi",
+      "file:///etc/passwd",
+      "blob:https://app.example.com/1",
+      "about:blank",
+      "content://media/1",
+      "intent://scan#Intent;scheme=zxing;end",
+      "myapp://has space",
+      "myapp://bad%zzescape",
+      "myapp://unicode/é",
+      "/relative/path",
+      "1app://starts-with-digit",
+      `https://app.example.com/${"a".repeat(513 - "https://app.example.com/".length)}`,
+    ],
+  },
+  /** Wake links carry the session id only. */
+  wakeUris: {
+    valid: [
+      { uri: buildWakeUri(first.sessionId), sessionId: first.sessionId },
+      { uri: buildWakeUri(first.sessionId, { universal: true }), sessionId: first.sessionId },
+    ],
+    invalid: [
+      "zunia://connect/wake",
+      "zunia://connect/wake?sid=short",
+      `zunia://wc/wake?sid=${first.sessionId}`,
+      `zunia://connect?sid=${first.sessionId}`,
     ],
   },
 };

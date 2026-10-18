@@ -124,6 +124,17 @@ export function deriveConnectKeys(input: {
   };
 }
 
+/**
+ * Bytes of the relay frame `{"t":"msg","n":"…","c":"…"}` that carries an envelope
+ * of `plaintextBytes` UTF-8 bytes: 41 bytes of JSON around a 16-character nonce
+ * and the ciphertext plus its 16-byte tag in unpadded base64url.
+ */
+export function sealedFrameBytes(plaintextBytes: number): number {
+  const sealed = plaintextBytes + 16;
+  const remainder = sealed % 3;
+  return 41 + Math.floor(sealed / 3) * 4 + (remainder === 0 ? 0 : remainder + 1);
+}
+
 export function frameAad(sessionId: string, sender: ConnectRole): Uint8Array {
   return utf8ToBytes(`${CONNECT_V2}|${sessionId}|${DIRECTION[sender]}`);
 }
@@ -134,6 +145,13 @@ export function encryptFrame(key: Uint8Array, nonce: Uint8Array, aad: Uint8Array
 
 export function decryptFrame(key: Uint8Array, nonce: Uint8Array, aad: Uint8Array, ciphertext: Uint8Array): Uint8Array {
   return chacha20poly1305(key, nonce, aad).decrypt(ciphertext);
+}
+
+function envelopeFor(seq: number, message: { type: string; id?: string; payload?: unknown }): ConnectEnvelope {
+  const envelope: ConnectEnvelope = { seq, type: message.type };
+  if (message.id !== undefined) envelope.id = message.id;
+  if (message.payload !== undefined) envelope.payload = message.payload;
+  return envelope;
 }
 
 /** Seals outgoing frames and opens incoming ones for one side of a session. */
@@ -167,13 +185,20 @@ export class ConnectCipher {
 
   seal(message: { type: string; id?: string; payload?: unknown }): SealedFrame {
     const seq = this.sendSeq + 1;
-    const envelope: ConnectEnvelope = { seq, type: message.type };
-    if (message.id !== undefined) envelope.id = message.id;
-    if (message.payload !== undefined) envelope.payload = message.payload;
+    const plaintext = utf8ToBytes(JSON.stringify(envelopeFor(seq, message)));
     const nonce = randomBytes(12);
-    const ciphertext = encryptFrame(this.sendKey, nonce, this.sendAad, utf8ToBytes(JSON.stringify(envelope)));
+    const ciphertext = encryptFrame(this.sendKey, nonce, this.sendAad, plaintext);
     this.sendSeq = seq;
     return { n: bytesToBase64Url(nonce), c: bytesToBase64Url(ciphertext) };
+  }
+
+  /**
+   * Size in bytes of the relay `msg` frame that `seal(message)` would produce
+   * next, without sealing anything or using up a sequence number. Compare it
+   * with `ZUNIA_CONNECT_LIMITS.maxFrameBytes` before sending.
+   */
+  sealedBytes(message: { type: string; id?: string; payload?: unknown }): number {
+    return sealedFrameBytes(utf8ToBytes(JSON.stringify(envelopeFor(this.sendSeq + 1, message))).length);
   }
 
   /** Throws `PAIRING_FAILED` for a forged, tampered, replayed or reordered frame. */

@@ -58,7 +58,25 @@ The QR code holds a one-time join token and the dApp's public key. The phone and
 
 Zunia runs the relay at `https://api.zunialab.com`, open to any site. Its source is [zunia-backend](https://github.com/Zunia-Lab/zunia-backend), if you would rather run your own and pass its URL as `apiBase`.
 
-On a phone browser, link to the app instead of showing a QR code: the pairing URI (`zunia://connect?...`) opens Zunia mobile directly.
+#### On a phone: open Zunia, then come back
+
+A phone cannot scan its own screen. In a phone or tablet browser (`isPhoneBrowser()`), lead with a link to `pairing.appUri` ("Open the Zunia app"); keep the QR code of `pairing.uri` for pairing another phone.
+
+```ts
+session.on("pairing", ({ uri, appUri }) => {
+  openLink.href = appUri ?? uri; // zunia://connect?...&ret=<this page>
+  qr.innerHTML = renderQrSvg(uri, { size: 160 });
+});
+```
+
+- `appUri` is the pairing link plus `ret`, the address Zunia opens once the user approves or declines. It defaults to this page's URL (when it is `https:`); set your own with `createZuniaSession({ nativeWs: { returnUrl } })`: an `https:` URL or your app's own scheme, at most 512 characters. The QR code never carries it.
+- Once the user has paired with that link (the SDK notices the tap, or call `session.openWallet()` from your button), each signing request opens Zunia with a wake link (`zunia://connect/wake?sid=...`) as soon as the relay holds it, so the request is on screen. After a reload, the session still counts as paired from this phone.
+- `nativeWs: { openWallet: "never" }` turns both off: the SDK then never opens Zunia by itself and adds `ret` only when you pass `returnUrl`. `session.openWallet()` still opens Zunia from a tap: the pairing link while pairing, the wake link once paired.
+- Mobile browsers may refuse to open an app without a recent tap, and may open the return address in a new tab. A new tab picks the session up with `restore()`.
+
+#### Limits
+
+The relay carries frames of at most 512 KiB. A request larger than that once encrypted is refused before it leaves: `INVALID_PARAMS` with `reason: "too-large"`. While the phone is offline, the relay holds up to 32 frames (1 MiB) for it; a request beyond that fails at once with `NETWORK` and `reason: "queue-full"` instead of waiting for the timeout.
 
 ### WalletConnect
 
@@ -71,7 +89,7 @@ await session.connect({
 });
 ```
 
-WalletConnect is loaded through the function you pass, so apps that do not use it never bundle it. Show `session.pairing.uri` as a QR code the same way. The Zunia mobile app accepts WalletConnect sessions but does not sign WalletConnect requests yet: pair it with `native-ws` instead.
+WalletConnect is loaded through the function you pass, so apps that do not use it never bundle it. Show `session.pairing.uri` as a QR code the same way. Zunia mobile 0.1.0 answers WalletConnect only in builds that include a WalletConnect project id: pair it with `native-ws` instead, which needs no project id and shows the user the verified origin.
 
 ## Sign in
 

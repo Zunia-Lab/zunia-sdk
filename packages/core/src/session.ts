@@ -36,8 +36,14 @@ export interface ZuniaAccountInfo extends AccountData {
 /** What to render while a phone pairs: a QR code of `uri`, or a deep link to it on mobile. */
 export interface ZuniaPairing {
   transport: "native-ws" | "walletconnect";
+  /** The QR code payload. */
   uri: string;
   expiresAt?: number;
+  /**
+   * QR pairing: the link that opens Zunia on this device ("Open the Zunia app").
+   * Same as `uri`, plus `ret` when there is a return target. Not for the QR code.
+   */
+  appUri?: string;
 }
 
 export interface ZuniaSessionEvents {
@@ -149,6 +155,11 @@ export interface ZuniaTransport {
   unlock?(): Promise<void>;
   /** Extension only: what the connected Zunia build can sign. */
   capabilities?(): ZuniaCapabilities | null;
+  /**
+   * QR pairing only: opens Zunia on this device, with the pairing link while
+   * pairing and with the wake link once paired. False when there is nothing to open.
+   */
+  openWallet?(): boolean;
   on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
   off<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void;
 }
@@ -187,6 +198,11 @@ export interface ZuniaSession {
   unlock?(): Promise<void>;
   /** What the connected Zunia extension can sign; null on other transports. */
   readonly capabilities?: ZuniaCapabilities | null;
+  /**
+   * QR pairing only: opens Zunia on this device (the pairing link while pairing,
+   * the wake link once paired). Call it from a tap. False when there is nothing to open.
+   */
+  openWallet?(): boolean;
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse>;
   signDirect(chainId: string, signer: string, signDoc: SignDocInput): Promise<DirectSignResponse>;
   signArbitrary(chainId: string, signer: string, data: string | Uint8Array): Promise<StdSignature>;

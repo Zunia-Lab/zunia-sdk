@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import type { ZuniaPairing, ZuniaSessionStatus } from "@zunialab/sdk-core";
 import { ZUNIA_CONNECT_BUTTON, ZUNIA_DEEP_LINKS } from "@zunialab/sdk-core";
+import { isPhoneBrowser } from "@zunialab/sdk-web";
 import { ZuniaQrCode } from "./ZuniaQrCode.js";
 
 export interface ConnectPairingModalProps {
@@ -14,18 +15,41 @@ export interface ConnectPairingModalProps {
   verificationCode?: string;
   error?: { message: string };
   title?: string;
+  /**
+   * Show "Open the Zunia app", the link that pairs Zunia on this same device.
+   * Default: only in a phone or tablet browser (`isPhoneBrowser()`), where it comes
+   * first. On a computer the link has nothing to open, so only the QR code shows.
+   */
+  showAppLink?: boolean;
 }
 
-/** Link that opens the Zunia app on the same phone, for mobile browsers. */
+/**
+ * Link that opens the Zunia app on the same phone, for mobile browsers. For QR
+ * pairing it is `pairing.appUri`, which carries the return target.
+ */
 export function pairingDeepLink(pairing: ZuniaPairing): string {
-  return pairing.transport === "native-ws" ? pairing.uri : `${ZUNIA_DEEP_LINKS.walletConnectPath}?uri=${encodeURIComponent(pairing.uri)}`;
+  if (pairing.transport === "native-ws") return pairing.appUri ?? pairing.uri;
+  return `${ZUNIA_DEEP_LINKS.walletConnectPath}?uri=${encodeURIComponent(pairing.uri)}`;
 }
 
-function describe(status: ZuniaSessionStatus, code: string | undefined, error: { message: string } | undefined): string {
+const noSubscription = () => () => {};
+
+/** Phone detection that renders the computer layout on the server and fixes it on hydration. */
+function usePhoneBrowser(): boolean {
+  return useSyncExternalStore(noSubscription, isPhoneBrowser, () => false);
+}
+
+function describe(
+  status: ZuniaSessionStatus,
+  code: string | undefined,
+  error: { message: string } | undefined,
+  appLink: boolean,
+): string {
   if (error && (status === "disconnected" || status === "error")) return error.message;
   if (status === "connecting") return "Preparing a secure session...";
   if (status === "awaiting_wallet") {
-    return code ? "Check that your phone shows this code, then approve there." : "Scan with the Zunia app on your phone.";
+    if (code) return "Check that your phone shows this code, then approve there.";
+    return appLink ? "Open the Zunia app on this phone, or scan the code with Zunia on another one." : "Scan with the Zunia app on your phone.";
   }
   if (status === "connected") return "Connected.";
   return "";
@@ -36,9 +60,19 @@ function describe(status: ZuniaSessionStatus, code: string | undefined, error: {
  * with the phone. The phone also shows the site the relay saw, so a copied QR
  * code on another site does not look like yours.
  */
-export function ConnectPairingModal({ open, onOpenChange, status, pairing, verificationCode, error, title = "Connect with Zunia" }: ConnectPairingModalProps) {
+export function ConnectPairingModal({
+  open,
+  onOpenChange,
+  status,
+  pairing,
+  verificationCode,
+  error,
+  title = "Connect with Zunia",
+  showAppLink,
+}: ConnectPairingModalProps) {
   const titleId = useId();
   const dialog = useRef<HTMLDivElement>(null);
+  const phone = usePhoneBrowser();
 
   useEffect(() => {
     if (!open) return;
@@ -51,8 +85,29 @@ export function ConnectPairingModal({ open, onOpenChange, status, pairing, verif
   }, [open, onOpenChange]);
 
   if (!open) return null;
-  const message = describe(status, verificationCode, error);
+  const appLink = showAppLink ?? phone;
+  const message = describe(status, verificationCode, error, appLink);
   const digits = verificationCode ? `${verificationCode.slice(0, 3)} ${verificationCode.slice(3)}` : undefined;
+  // The session notices a tap on this link (its href is `pairing.appUri`) and then
+  // opens Zunia by itself after each signing request, so the user sees it.
+  const link =
+    pairing && !digits && appLink ? (
+      <a
+        href={pairingDeepLink(pairing)}
+        style={{
+          display: "inline-block",
+          padding: "10px 16px",
+          borderRadius: 12,
+          background: ZUNIA_CONNECT_BUTTON.bg,
+          color: "#fff",
+          textDecoration: "none",
+          fontWeight: 500,
+          margin: "16px 0 4px",
+        }}
+      >
+        Open the Zunia app
+      </a>
+    ) : null;
 
   return (
     <div
@@ -90,9 +145,10 @@ export function ConnectPairingModal({ open, onOpenChange, status, pairing, verif
         <h2 id={titleId} style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
           {title}
         </h2>
+        {link}
         {pairing && !digits ? (
-          <div style={{ margin: "16px auto", width: 220, borderRadius: 16, overflow: "hidden", background: "#fff" }}>
-            <ZuniaQrCode value={pairing.uri} size={220} label="Pairing QR code" />
+          <div style={{ margin: "16px auto", width: appLink ? 160 : 220, borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+            <ZuniaQrCode value={pairing.uri} size={appLink ? 160 : 220} label="Pairing QR code" />
           </div>
         ) : null}
         {digits ? (
@@ -107,23 +163,6 @@ export function ConnectPairingModal({ open, onOpenChange, status, pairing, verif
           <p role="status" style={{ fontSize: 13, opacity: 0.8, margin: "0 0 16px" }}>
             {message}
           </p>
-        ) : null}
-        {pairing && !digits ? (
-          <a
-            href={pairingDeepLink(pairing)}
-            style={{
-              display: "inline-block",
-              padding: "10px 16px",
-              borderRadius: 12,
-              background: ZUNIA_CONNECT_BUTTON.bg,
-              color: "#fff",
-              textDecoration: "none",
-              fontWeight: 500,
-              marginBottom: 12,
-            }}
-          >
-            Open the Zunia app
-          </a>
         ) : null}
         <div>
           <button

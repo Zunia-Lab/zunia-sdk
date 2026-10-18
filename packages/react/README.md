@@ -56,6 +56,7 @@ The hook returns the session snapshot as state, and re-renders on every change, 
 | `error` | The last failure, a `ZuniaConnectError`. `explainZuniaError(error)` puts it in words. |
 | `connected`, `locked`, `connecting`, `restoring` | Shortcuts for rendering. `locked`: connected, but the wallet is locked. |
 | `connect`, `disconnect`, `restore`, `unlock`, `signIn` | Actions. `unlock` opens the wallet's unlock window and keeps your site's grant: call it from a click. |
+| `openWallet` | QR pairing on a phone: opens Zunia (the pairing link, then the wake link for a waiting request). Call it from a tap. |
 | `session` | The underlying session: `getOfflineSignerFor`, `signDirect`, `on`... |
 
 `restore` (default `true`) reattaches to the previous session on mount without prompting. Pass the same options as `connect` so it can find a QR or WalletConnect session. When it finds the extension locked, `locked` is true and `accounts` stays empty until the user unlocks: offer a button that calls `unlock`.
@@ -76,7 +77,9 @@ Verify on your server with `verifySignIn` from [`@zunialab/sdk-core`](https://ww
 
 ## ConnectPairingModal
 
-Shows the QR code to scan, with a link that opens the Zunia app when the page is already on the phone. Once the phone has scanned it, the dialog shows the 6-digit code instead, so the user can check both screens match. Escape and the cancel button call `onOpenChange(false)`: disconnect there to cancel the pairing.
+Shows the QR code to scan. In a phone or tablet browser it leads with "Open the Zunia app", a link to `pairing.appUri` that opens Zunia on the same device and brings the user back here (`ret`) once they answer; the QR code stays below it for pairing another phone. On a computer the link would have nothing to open, so only the QR code shows. `showAppLink` overrides the detection. Once the phone has scanned it, the dialog shows the 6-digit code instead, so the user can check both screens match. Escape and the cancel button call `onOpenChange(false)`: disconnect there to cancel the pairing.
+
+After the user pairs with that link, each signing request opens Zunia on the phone (a wake link), so the request is on screen. Turn that off with `useZuniaSession({ nativeWs: { openWallet: "never" } })`.
 
 ## Other components
 

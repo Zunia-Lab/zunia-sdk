@@ -1,6 +1,7 @@
 import {
   ConnectCipher,
   ZUNIA_CONNECT_CLOSE_CODES,
+  ZUNIA_CONNECT_LIMITS,
   ZUNIA_CONNECT_PATHS,
   ZUNIA_CONNECT_PROTOCOL,
   ZUNIA_CONNECT_TOKEN_PROTOCOL_PREFIX,
@@ -10,11 +11,13 @@ import {
   accountNumberToString,
   base64UrlToBytes,
   buildPairingUri,
+  buildWakeUri,
   bytesToBase64,
   bytesToBase64Url,
   createNonce,
   deriveConnectKeys,
   generateConnectKeyPair,
+  isValidReturnUrl,
   isZuniaProviderErrorCode,
   normalizeAminoResponse,
   normalizeChainIds,
@@ -45,6 +48,7 @@ import {
   type ZuniaStorage,
   type ZuniaTransport,
 } from "@zunialab/sdk-core";
+import { isPhoneBrowser } from "../detect.js";
 import { EventBus } from "../events.js";
 import { STORAGE_KEYS, readJson, removeKey, resolveStorage, writeJson } from "../storage.js";
 
@@ -65,6 +69,24 @@ export interface NativeWsTransportOptions {
   reconnectMaxMs?: number;
   /** How long `restore` waits for the relay before resolving. Default 5 s. */
   restoreWaitMs?: number;
+  /**
+   * Where Zunia returns after the user answers, when the user opened Zunia from this
+   * device with the pairing's `appUri` (sent as `ret`). An `https:` URL or your app's
+   * own scheme, at most 512 characters. Default with `openWallet: "auto"` on a phone
+   * browser: this page's URL (when it is https).
+   */
+  returnUrl?: string;
+  /**
+   * `auto` (default): on a phone browser, `appUri` carries the return target, and once
+   * the user has paired from this phone the SDK opens Zunia with a wake link after
+   * each signing request, so the request is on screen. `never`: the SDK never opens
+   * Zunia by itself; call `openWallet()` from your own button.
+   */
+  openWallet?: "auto" | "never";
+  /** Overrides the phone browser detection (`isPhoneBrowser()`), e.g. in a WebView. */
+  phoneBrowser?: boolean;
+  /** How the SDK opens a Zunia link. Default `location.assign`. */
+  openUrl?: (url: string) => void;
 }
 
 const OPEN = 1;
@@ -95,6 +117,8 @@ interface StoredSession extends RelaySession {
   receiveSeq: number;
   accounts: WireAccount[];
   chains: string[];
+  /** Paired from this phone with the app link: requests wake Zunia. Absent before 0.2. */
+  sameDevice?: boolean;
 }
 
 interface Pending {
@@ -109,6 +133,14 @@ interface Unacked {
   data: string;
   sent: number | null;
 }
+
+/** A `msg` frame written on the current socket that the relay has not confirmed yet. */
+interface InFlight {
+  id: string;
+  write: number;
+}
+
+const SIGNING_TYPES: ReadonlySet<string> = new Set(["sign_amino", "sign_direct", "sign_arbitrary"]);
 
 interface Attempt {
   requestId: string;
@@ -180,6 +212,17 @@ function walletError(payload: unknown, fallback: ZuniaConnectErrorCode, fallback
   return new ZuniaConnectError(code, message);
 }
 
+function defaultOpenUrl(url: string): void {
+  const loc = (globalThis as { location?: Location }).location;
+  if (!loc) throw new ZuniaConnectError("UNSUPPORTED", "There is no page to open Zunia from");
+  loc.assign(url);
+}
+
+function pageIsHidden(): boolean {
+  const doc = (globalThis as { document?: Document }).document;
+  return doc?.visibilityState === "hidden";
+}
+
 function defaultMetadata(): ZuniaDappMetadata {
   const loc = typeof location === "undefined" ? undefined : location;
   const doc = typeof document === "undefined" ? undefined : document;
@@ -206,6 +249,10 @@ export class NativeWsTransport implements ZuniaTransport {
   private readonly reconnectMinMs: number;
   private readonly reconnectMaxMs: number;
   private readonly restoreWaitMs: number;
+  private readonly returnUrl: string | undefined;
+  private readonly openMode: "auto" | "never";
+  private readonly phoneOverride: boolean | undefined;
+  private readonly openUrl: (url: string) => void;
 
   private phase: "idle" | "pairing" | "active" | "ended" = "idle";
   private status: ZuniaSessionStatus = "idle";
@@ -226,8 +273,17 @@ export class NativeWsTransport implements ZuniaTransport {
   private written = 0;
   /** Every frame up to this write count is known to have reached the relay. */
   private confirmed = 0;
-  /** Write count when the outstanding ping went out. */
-  private pingMark: number | null = null;
+  /**
+   * Write counts of the pings still waiting for a pong, oldest first. Every `msg`
+   * frame is followed by its own ping: the relay answers in order and only speaks
+   * up about a frame it refuses, so an `error` belongs to the oldest frame in
+   * `inflight` and a pong confirms everything written before its ping.
+   */
+  private pings: number[] = [];
+  private inflight: InFlight[] = [];
+  /** Signing requests that open Zunia once the relay has them. */
+  private readonly wakeFor = new Set<string>();
+  private sameDevice = false;
   private socket: WebSocket | null = null;
   private welcomed = false;
   private lastSeen = 0;
@@ -245,6 +301,10 @@ export class NativeWsTransport implements ZuniaTransport {
     this.reconnectMinMs = options.reconnectMinMs ?? 1_000;
     this.reconnectMaxMs = options.reconnectMaxMs ?? 30_000;
     this.restoreWaitMs = options.restoreWaitMs ?? 5_000;
+    this.returnUrl = options.returnUrl;
+    this.openMode = options.openWallet ?? "auto";
+    this.phoneOverride = options.phoneBrowser;
+    this.openUrl = options.openUrl ?? defaultOpenUrl;
   }
 
   /** The QR code to show while pairing. */
@@ -260,6 +320,27 @@ export class NativeWsTransport implements ZuniaTransport {
   /** The dApp origin the relay saw when the session was created. */
   get verifiedOrigin(): string | null {
     return this.session?.verifiedOrigin ?? null;
+  }
+
+  /** The user paired from this phone with the app link, so requests open Zunia. */
+  get pairedOnThisDevice(): boolean {
+    return this.sameDevice;
+  }
+
+  /**
+   * Opens Zunia on this device: the pairing link (with `ret`) while pairing, which
+   * also marks the session as paired from this phone, or the wake link once paired,
+   * so the waiting request is on screen. Call it from a tap. False when there is
+   * nothing to open or the page cannot open links.
+   */
+  openWallet(): boolean {
+    if (this.phase === "pairing" && this.currentPairing?.appUri) {
+      if (!this.open(this.currentPairing.appUri)) return false;
+      this.sameDevice = true;
+      return true;
+    }
+    if (this.phase === "active" && this.session) return this.open(buildWakeUri(this.session.sessionId));
+    return false;
   }
 
   on<K extends keyof ZuniaSessionEvents>(event: K, listener: ZuniaSessionEvents[K]): void {
@@ -285,6 +366,12 @@ export class NativeWsTransport implements ZuniaTransport {
     if (!apiBase) throw new ZuniaConnectError("INVALID_PARAMS", "Pass apiBase, the relay URL, to pair a phone by QR code");
     if (!this.WebSocketImpl || !this.fetchImpl) {
       throw new ZuniaConnectError("UNSUPPORTED", "QR pairing needs WebSocket and fetch");
+    }
+    if (this.returnUrl !== undefined && !isValidReturnUrl(this.returnUrl)) {
+      throw new ZuniaConnectError(
+        "INVALID_PARAMS",
+        "returnUrl must be an https: URL or your app's own scheme, at most 512 characters",
+      );
     }
     if (this.phase === "pairing" || this.phase === "active") await this.disconnect("replaced");
 
@@ -316,14 +403,19 @@ export class NativeWsTransport implements ZuniaTransport {
     this.keyPair = generateConnectKeyPair();
     this.phase = "pairing";
     this.retries = 0;
+    this.sameDevice = false;
+    const link = {
+      sessionId: created.sessionId,
+      joinToken: created.walletJoinToken,
+      dappPublicKey: bytesToBase64Url(this.keyPair.publicKey),
+      relay: relayBase,
+    };
+    const returnUrl = this.returnTarget();
+    // The QR code never carries `ret`: the wallet only follows it on this device.
     this.currentPairing = {
       transport: "native-ws",
-      uri: buildPairingUri({
-        sessionId: created.sessionId,
-        joinToken: created.walletJoinToken,
-        dappPublicKey: bytesToBase64Url(this.keyPair.publicKey),
-        relay: relayBase,
-      }),
+      uri: buildPairingUri(link),
+      appUri: buildPairingUri(returnUrl ? { ...link, returnUrl } : link),
       expiresAt: created.expiresAt,
     };
 
@@ -341,9 +433,10 @@ export class NativeWsTransport implements ZuniaTransport {
       };
     });
     this.watchNetwork(true);
+    this.watchAppLink(this.openMode === "auto" && this.phone());
     this.bus.emit("pairing", this.currentPairing);
     this.setStatus("awaiting_wallet");
-    this.open();
+    this.openSocket();
     return done;
   }
 
@@ -393,6 +486,7 @@ export class NativeWsTransport implements ZuniaTransport {
     this.accounts = accounts;
     this.chains = stringList(stored.chains);
     this.code = stored.verificationCode;
+    this.sameDevice = stored.sameDevice === true;
     this.phase = "active";
     this.retries = 0;
     this.watchNetwork(true);
@@ -409,7 +503,7 @@ export class NativeWsTransport implements ZuniaTransport {
         }, this.restoreWaitMs),
       };
     });
-    this.open();
+    this.openSocket();
     const ok = await settled;
     if (ok && this.phase === "active") void this.refreshAccounts();
     return ok;
@@ -509,14 +603,47 @@ export class NativeWsTransport implements ZuniaTransport {
         reject(new ZuniaConnectError("TIMEOUT", "The wallet did not answer in time"));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
+      if (SIGNING_TYPES.has(type) && this.shouldWake()) this.wakeFor.add(id);
       try {
         this.sendSealed({ type, id, payload });
       } catch (error) {
         clearTimeout(timer);
         this.pending.delete(id);
+        this.wakeFor.delete(id);
         reject(toZuniaConnectError(error));
       }
     });
+  }
+
+  private phone(): boolean {
+    return this.phoneOverride ?? isPhoneBrowser();
+  }
+
+  /** `returnUrl`, or this page's URL in `auto` mode on a phone browser. */
+  private returnTarget(): string | undefined {
+    if (this.returnUrl !== undefined) return this.returnUrl;
+    if (this.openMode !== "auto" || !this.phone()) return undefined;
+    const href = (globalThis as { location?: Location }).location?.href;
+    return isValidReturnUrl(href) ? href : undefined;
+  }
+
+  private shouldWake(): boolean {
+    return this.openMode === "auto" && this.sameDevice && this.phone();
+  }
+
+  private open(url: string): boolean {
+    try {
+      this.openUrl(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The relay holds a signing request: bring Zunia up so the user sees it. */
+  private wake(): void {
+    if (!this.session || this.phase !== "active" || pageIsHidden()) return;
+    this.open(buildWakeUri(this.session.sessionId));
   }
 
   private sendSealed(message: Omit<ConnectEnvelope, "seq"> & { id: string }): void {
@@ -524,15 +651,23 @@ export class NativeWsTransport implements ZuniaTransport {
     if (this.unacked.length >= UNACKED_LIMIT) {
       throw new ZuniaConnectError("NETWORK", "Too many requests are waiting for the wallet");
     }
+    // A bigger frame would make the relay close the socket, and the resend after
+    // the reconnect would close it again.
+    const bytes = this.cipher.sealedBytes(message);
+    if (bytes > ZUNIA_CONNECT_LIMITS.maxFrameBytes) {
+      throw new ZuniaConnectError(
+        "INVALID_PARAMS",
+        `This request is ${Math.ceil(bytes / 1024)} KiB once encrypted; the relay carries at most ${ZUNIA_CONNECT_LIMITS.maxFrameBytes / 1024} KiB`,
+        undefined,
+        "too-large",
+      );
+    }
     const frame = this.cipher.seal(message);
     // Saved before the frame leaves, so a reload never reuses a sequence number.
     this.persist();
     const entry: Unacked = { id: message.id, data: JSON.stringify({ t: "msg", n: frame.n, c: frame.c } satisfies RelayClientFrame), sent: null };
     this.unacked.push(entry);
-    if (this.ready()) {
-      entry.sent = this.write(entry.data);
-      this.ping();
-    }
+    if (this.ready()) this.writeEntry(entry);
   }
 
   private ready(): boolean {
@@ -545,18 +680,75 @@ export class NativeWsTransport implements ZuniaTransport {
     return this.written;
   }
 
+  private writeEntry(entry: Unacked): void {
+    entry.sent = this.write(entry.data);
+    this.inflight.push({ id: entry.id, write: entry.sent });
+    this.ping();
+  }
+
   /** The relay answers pings in order, so a pong confirms every frame written before it. */
   private ping(): void {
-    if (!this.ready() || this.pingMark !== null) return;
-    this.write(JSON.stringify({ t: "ping" } satisfies RelayClientFrame));
-    this.pingMark = this.written;
+    if (!this.ready()) return;
+    this.pings.push(this.write(JSON.stringify({ t: "ping" } satisfies RelayClientFrame)));
+  }
+
+  private onPong(): void {
+    const mark = this.pings.shift();
+    if (mark === undefined) return;
+    this.confirmed = Math.max(this.confirmed, mark);
+    let wake = false;
+    this.inflight = this.inflight.filter((frame) => {
+      if (frame.write > mark) return true;
+      if (this.wakeFor.delete(frame.id)) wake = true;
+      return false;
+    });
+    if (wake) this.wake();
+  }
+
+  /**
+   * The relay refused the oldest frame not yet confirmed. `QUEUE_FULL`: the phone
+   * is offline and its queue is full, so the request will never arrive; it fails
+   * now instead of at the timeout, and is not sent again.
+   */
+  private onRelayError(frame: Extract<RelayServerFrame, { t: "error" }>): void {
+    const refused = this.inflight.shift();
+    const detail = String(frame.message).slice(0, 200);
+    if (!refused) {
+      this.bus.emit("error", new ZuniaConnectError("NETWORK", `The relay refused a frame: ${detail}`));
+      return;
+    }
+    this.fail(
+      refused.id,
+      frame.code === "QUEUE_FULL"
+        ? new ZuniaConnectError(
+            "NETWORK",
+            "Zunia mobile is offline and the relay already holds as many requests for it as it can",
+            undefined,
+            "queue-full",
+          )
+        : new ZuniaConnectError("NETWORK", `The relay refused the request: ${detail}`),
+    );
+  }
+
+  private fail(id: string, error: ZuniaConnectError): void {
+    this.settle(id);
+    this.wakeFor.delete(id);
+    if (this.phase === "pairing" && this.attempt?.requestId === id) {
+      void this.disconnect("pairing_failed", error);
+      return;
+    }
+    const pending = this.pending.get(id);
+    if (!pending) return;
+    this.pending.delete(id);
+    clearTimeout(pending.timer);
+    pending.reject(error);
   }
 
   private settle(id: string): void {
     this.unacked = this.unacked.filter((entry) => entry.id !== id);
   }
 
-  private open(): void {
+  private openSocket(): void {
     const session = this.session;
     if (!session || !this.WebSocketImpl || (this.phase !== "pairing" && this.phase !== "active")) return;
     this.clearReconnect();
@@ -595,7 +787,8 @@ export class NativeWsTransport implements ZuniaTransport {
     const socket = this.socket;
     this.socket = null;
     this.welcomed = false;
-    this.pingMark = null;
+    this.pings = [];
+    this.inflight = [];
     this.stopHeartbeat();
     if (!socket) return;
     socket.onopen = null;
@@ -631,11 +824,7 @@ export class NativeWsTransport implements ZuniaTransport {
         }
         return;
       case "pong":
-        if (this.pingMark !== null) {
-          this.confirmed = this.pingMark;
-          this.pingMark = null;
-        }
-        return;
+        return this.onPong();
       case "closed":
         return this.terminate(
           frame.reason,
@@ -644,8 +833,7 @@ export class NativeWsTransport implements ZuniaTransport {
             : new ZuniaConnectError("DISCONNECTED", "The wallet ended the session"),
         );
       case "error":
-        this.bus.emit("error", new ZuniaConnectError("NETWORK", `The relay refused a frame: ${String(frame.message).slice(0, 200)}`));
-        return;
+        return this.onRelayError(frame);
       default:
         return;
     }
@@ -660,7 +848,7 @@ export class NativeWsTransport implements ZuniaTransport {
     // Frames the relay never confirmed may have died with the old socket. The
     // wallet drops any it already has, since their sequence numbers are old.
     for (const entry of this.unacked) {
-      if (entry.sent === null || entry.sent > this.confirmed) entry.sent = this.write(entry.data);
+      if (entry.sent === null || entry.sent > this.confirmed) this.writeEntry(entry);
     }
     this.ping();
     if (this.phase === "active") {
@@ -696,16 +884,20 @@ export class NativeWsTransport implements ZuniaTransport {
     this.code = this.keys.verificationCode;
     this.bus.emit("verification", this.code);
     this.settle(attempt.requestId);
-    this.sendSealed({
-      type: "connect_request",
-      id: attempt.requestId,
-      payload: {
-        metadata: attempt.metadata,
-        chains: attempt.chains,
-        methods: [...ZUNIA_NATIVE_CONNECT.defaultMethods],
-        events: [...ZUNIA_NATIVE_CONNECT.defaultEvents],
-      },
-    });
+    try {
+      this.sendSealed({
+        type: "connect_request",
+        id: attempt.requestId,
+        payload: {
+          metadata: attempt.metadata,
+          chains: attempt.chains,
+          methods: [...ZUNIA_NATIVE_CONNECT.defaultMethods],
+          events: [...ZUNIA_NATIVE_CONNECT.defaultEvents],
+        },
+      });
+    } catch (error) {
+      void this.disconnect("pairing_failed", toZuniaConnectError(error, "PAIRING_FAILED"));
+    }
   }
 
   private onSealed(frame: { n: string; c: string }): void {
@@ -754,6 +946,7 @@ export class NativeWsTransport implements ZuniaTransport {
         this.phase = "active";
         this.keyPair = null;
         this.currentPairing = undefined;
+        this.watchAppLink(false);
         this.persist();
         this.bus.emit("accountsChanged", this.getAccounts());
         this.bus.emit("chainChanged", this.getChains());
@@ -829,7 +1022,7 @@ export class NativeWsTransport implements ZuniaTransport {
     const ceiling = Math.min(this.reconnectMaxMs, this.reconnectMinMs * 2 ** this.retries);
     this.retries += 1;
     const delay = ceiling / 2 + Math.random() * (ceiling / 2);
-    this.reconnectTimer = setTimeout(() => this.open(), slow ? Math.max(delay, 10_000) : delay);
+    this.reconnectTimer = setTimeout(() => this.openSocket(), slow ? Math.max(delay, 10_000) : delay);
   }
 
   private clearReconnect(): void {
@@ -847,7 +1040,8 @@ export class NativeWsTransport implements ZuniaTransport {
         this.onClose(1006);
         return;
       }
-      this.ping();
+      // One unanswered ping is enough to notice a dead link.
+      if (this.pings.length === 0) this.ping();
     }, this.heartbeatMs);
   }
 
@@ -857,8 +1051,27 @@ export class NativeWsTransport implements ZuniaTransport {
   }
 
   private readonly onOnline = () => {
-    if (this.reconnectTimer) this.open();
+    if (this.reconnectTimer) this.openSocket();
   };
+
+  /**
+   * A tap on any link to `pairing.appUri` (the React modal's "Open the Zunia app",
+   * or your own) means the user pairs from this phone.
+   */
+  private readonly onDocumentClick = (event: Event) => {
+    const appUri = this.currentPairing?.appUri;
+    if (this.phase !== "pairing" || !appUri) return;
+    const target = event.target as { closest?: (selector: string) => Element | null } | null;
+    const link = target?.closest?.("a[href]");
+    if (link?.getAttribute("href") === appUri) this.sameDevice = true;
+  };
+
+  private watchAppLink(on: boolean): void {
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc?.addEventListener) return;
+    if (on) doc.addEventListener("click", this.onDocumentClick, true);
+    else doc.removeEventListener("click", this.onDocumentClick, true);
+  }
 
   private watchNetwork(on: boolean): void {
     const target = globalThis as { addEventListener?: typeof addEventListener; removeEventListener?: typeof removeEventListener };
@@ -889,6 +1102,7 @@ export class NativeWsTransport implements ZuniaTransport {
       verificationCode: this.keys.verificationCode,
       sendSeq: state.sendSeq,
       receiveSeq: state.receiveSeq,
+      ...(this.sameDevice ? { sameDevice: true } : {}),
       accounts: this.accounts.map((account) => ({
         chainId: account.chainId,
         address: account.address,
@@ -908,6 +1122,9 @@ export class NativeWsTransport implements ZuniaTransport {
     this.clearReconnect();
     this.dropSocket();
     this.watchNetwork(false);
+    this.watchAppLink(false);
+    this.wakeFor.clear();
+    this.sameDevice = false;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);

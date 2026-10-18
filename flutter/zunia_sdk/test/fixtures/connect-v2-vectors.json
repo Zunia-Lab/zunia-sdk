@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "zunia.connect.v2 vectors, shared by the JS SDK and the Dart wallet. Secret keys and nonces are fixed here; real sessions use random ones. Keys: X25519, salt SHA-256('zunia.connect.v2' 0x00 sessionId 0x00 dappPublicKey walletPublicKey), HKDF-SHA256 with info 'zunia.connect.v2 dapp->wallet', 'zunia.connect.v2 wallet->dapp' (32 bytes each) and 'zunia.connect.v2 verification code' (4 bytes, big-endian, mod 1000000, 6 digits). Frames: ChaCha20-Poly1305, 12-byte nonce, associated data 'zunia.connect.v2|<sessionId>|<sender>->...', plaintext the JSON envelope. Binary values are hex, public keys, nonces and ciphertexts unpadded base64url.",
+  "about": "zunia.connect.v2 vectors, shared by the JS SDK and the Dart wallet. Secret keys and nonces are fixed here; real sessions use random ones. Keys: X25519, salt SHA-256('zunia.connect.v2' 0x00 sessionId 0x00 dappPublicKey walletPublicKey), HKDF-SHA256 with info 'zunia.connect.v2 dapp->wallet', 'zunia.connect.v2 wallet->dapp' (32 bytes each) and 'zunia.connect.v2 verification code' (4 bytes, big-endian, mod 1000000, 6 digits). Frames: ChaCha20-Poly1305, 12-byte nonce, associated data 'zunia.connect.v2|<sessionId>|<sender>->...', plaintext the JSON envelope. Binary values are hex, public keys, nonces and ciphertexts unpadded base64url. Pairing links may carry `ret` (returnUrls lists what a wallet follows); wake links carry the session id only.",
   "keyAgreement": [
     {
       "name": "first session",
@@ -91,7 +91,74 @@
       "zunia://connect?v=1&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com",
       "zunia://connect?v=2&sid=short&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com",
       "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=https%3A%2F%2Fapi.zunialab.com",
-      "zunia://wc?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com"
+      "zunia://wc?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com",
+      "zunia://connect/wake?sid=Zf3kQ9xTn2LmP8vR4sWb1A"
+    ],
+    "withReturn": [
+      {
+        "uri": "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com&ret=https%3A%2F%2Fapp.example.com%2Fswap%3Fpair%3D1%23top",
+        "returnUrl": "https://app.example.com/swap?pair=1#top"
+      },
+      {
+        "uri": "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com&ret=myapp%3A%2F%2Fzunia%2Freturn",
+        "returnUrl": "myapp://zunia/return"
+      },
+      {
+        "uri": "zunia://connect?v=2&sid=Zf3kQ9xTn2LmP8vR4sWb1A&t=78vWrA8rgZkX-X3b2kFXbZ4xGVuugyrwkOCgVtoTI8M&pk=6DGzxA3X-LUeWXgypFq8GG5l4txV91YLSJSpCTDLHjg&r=wss%3A%2F%2Fapi.zunialab.com&ret=com.example.app%3A%2Foauth",
+        "returnUrl": "com.example.app:/oauth"
+      }
+    ]
+  },
+  "returnUrls": {
+    "valid": [
+      "https://app.example.com",
+      "https://app.example.com/swap?from=uatom&to=uosmo#review",
+      "myapp://zunia/return",
+      "my-app+dev.v2://done",
+      "com.example.app:/oauth",
+      "fb1234567890://authorize",
+      "https://app.example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "invalid": [
+      "",
+      "http://app.example.com",
+      "HTTP://app.example.com",
+      "https://",
+      "https:/no-host",
+      "zunia://connect",
+      "ZuniaMobile://x",
+      "wc:abc@2",
+      "javascript:alert(1)",
+      "data:text/html,hi",
+      "file:///etc/passwd",
+      "blob:https://app.example.com/1",
+      "about:blank",
+      "content://media/1",
+      "intent://scan#Intent;scheme=zxing;end",
+      "myapp://has space",
+      "myapp://bad%zzescape",
+      "myapp://unicode/é",
+      "/relative/path",
+      "1app://starts-with-digit",
+      "https://app.example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  },
+  "wakeUris": {
+    "valid": [
+      {
+        "uri": "zunia://connect/wake?sid=Zf3kQ9xTn2LmP8vR4sWb1A",
+        "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A"
+      },
+      {
+        "uri": "https://zunialab.com/connect/wake?sid=Zf3kQ9xTn2LmP8vR4sWb1A",
+        "sessionId": "Zf3kQ9xTn2LmP8vR4sWb1A"
+      }
+    ],
+    "invalid": [
+      "zunia://connect/wake",
+      "zunia://connect/wake?sid=short",
+      "zunia://wc/wake?sid=Zf3kQ9xTn2LmP8vR4sWb1A",
+      "zunia://connect?sid=Zf3kQ9xTn2LmP8vR4sWb1A"
     ]
   }
 }

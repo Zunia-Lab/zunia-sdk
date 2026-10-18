@@ -3,6 +3,7 @@ export {
   enableZunia,
   getZunia,
   getZuniaSync,
+  isPhoneBrowser,
   isZuniaInstalled,
   waitForZuniaInitialized,
 } from "./detect.js";
@@ -42,14 +43,17 @@ export type { ConnectWithZuniaSize, CreateConnectWithZuniaButtonOptions } from "
 
 export {
   ZUNIA_CONNECT_BUTTON,
+  ZUNIA_CONNECT_LIMITS,
   ZUNIA_DEEP_LINKS,
   ZUNIA_NATIVE_CONNECT,
   ZUNIA_PROVIDER_GLOBAL,
   ZUNIA_WALLET,
   ZUNIA_WALLETCONNECT,
   ZuniaConnectError,
+  buildWakeUri,
   createNonce,
   explainZuniaError,
+  isValidReturnUrl,
   zuniaCapabilities,
   zuniaSignMode,
 } from "@zunialab/sdk-core";
@@ -68,6 +72,7 @@ export type {
   ZuniaCapabilities,
   ZuniaConnectErrorCode,
   ZuniaErrorExplanation,
+  ZuniaErrorReason,
   ZuniaKey,
   ZuniaOfflineSigner,
   ZuniaPairing,

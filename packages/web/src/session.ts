@@ -269,6 +269,16 @@ export class ZuniaSessionImpl implements ZuniaSession {
     }
   }
 
+  /**
+   * QR pairing: opens Zunia on this phone, with the pairing link while pairing (the
+   * session then counts as paired from this phone) or the wake link once paired, so
+   * a waiting request is on screen. Call it from a tap. False on other transports or
+   * when there is nothing to open.
+   */
+  openWallet(): boolean {
+    return this.active?.openWallet?.() ?? false;
+  }
+
   signAmino(chainId: string, signer: string, signDoc: StdSignDoc): Promise<AminoSignResponse> {
     return this.run((transport) => transport.signAmino(chainId, signer, signDoc));
   }

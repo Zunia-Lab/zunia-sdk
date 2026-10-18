@@ -61,13 +61,20 @@ interface Room {
 export class FakeRelay {
   readonly rooms = new Map<string, Room>();
   readonly frames: Array<{ role: "dapp" | "wallet"; frame: Record<string, unknown> }> = [];
+  /** Frames held per direction for a peer that is offline; beyond it, `QUEUE_FULL`. */
+  queueMaxFrames = 32;
   private server!: Server;
   private wss!: WebSocketServer;
   base = "";
 
   async start(): Promise<void> {
     this.server = createServer((req, res) => this.http(req, res));
-    this.wss = new WebSocketServer({ noServer: true, handleProtocols: (protocols) => (protocols.has("zunia.connect.v2") ? "zunia.connect.v2" : false) });
+    // Like the real relay: a frame over 512 KiB closes the socket (1009).
+    this.wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: 512 * 1024,
+      handleProtocols: (protocols) => (protocols.has("zunia.connect.v2") ? "zunia.connect.v2" : false),
+    });
     this.server.on("upgrade", (req, socket, head) => {
       this.wss.handleUpgrade(req, socket, head, (ws) => this.admit(ws, req));
     });
@@ -182,8 +189,8 @@ export class FakeRelay {
       this.frames.push({ role, frame });
       if (room.sockets[role] !== ws) return;
       if (frame.t === "ping") this.send(ws, { t: "pong" });
-      else if (frame.t === "hello" && role === "wallet") this.deliver(room, "dapp", { t: "hello", pk: frame.pk });
-      else if (frame.t === "msg") this.deliver(room, peer, { t: "msg", n: frame.n, c: frame.c });
+      else if (frame.t === "hello" && role === "wallet") this.deliver(room, "dapp", { t: "hello", pk: frame.pk }, ws);
+      else if (frame.t === "msg") this.deliver(room, peer, { t: "msg", n: frame.n, c: frame.c }, ws);
       else if (frame.t === "paired" && role === "wallet") {
         room.paired = true;
         room.expiresAt = Date.now() + 86_400_000;
@@ -195,11 +202,13 @@ export class FakeRelay {
     });
   }
 
-  private deliver(room: Room, to: "dapp" | "wallet", frame: Record<string, unknown>): void {
+  private deliver(room: Room, to: "dapp" | "wallet", frame: Record<string, unknown>, sender: WebSocket): void {
     const target = room.sockets[to];
     const data = JSON.stringify(frame);
     if (target && target.readyState === WebSocket.OPEN) target.send(data);
-    else room.queues[to].push(data);
+    else if (room.queues[to].length >= this.queueMaxFrames) {
+      this.send(sender, { t: "error", code: "QUEUE_FULL", message: "The other side is offline and its queue is full" });
+    } else room.queues[to].push(data);
   }
 
   private send(ws: WebSocket, frame: Record<string, unknown>): void {
@@ -270,7 +279,21 @@ export class FakeWallet {
     this.send({ t: "close" });
   }
 
+  private url = "";
+
+  /** Drops the connection without a word, like a phone that went to sleep. */
+  goOffline(): void {
+    this.socket?.terminate();
+    this.socket = null;
+  }
+
+  /** Reconnects with the resume token; the relay hands over what it queued. */
+  comeBack(): Promise<void> {
+    return this.open(this.url, this.resumeToken);
+  }
+
   private open(url: string, secret: string): Promise<void> {
+    this.url = url;
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url, ["zunia.connect.v2", `zunia.token.${secret}`]);
       this.socket = socket;
