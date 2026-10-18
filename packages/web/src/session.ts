@@ -72,6 +72,13 @@ export class ZuniaSessionImpl implements ZuniaSession {
   private active: ZuniaTransport | null = null;
   private unwire: (() => void) | null = null;
   private restoring: Promise<boolean> | null = null;
+  /**
+   * Bumped by every `connect()` and `disconnect()`. A restore still running
+   * when it changes has been overtaken and stops without touching the session.
+   */
+  private generation = 0;
+  /** `connect()` calls in flight: no restore starts under them. */
+  private connecting = 0;
   private readonly bus = new EventBus<ZuniaSessionEvents>();
   private readonly listeners = new Set<() => void>();
   private snapshot: ZuniaSessionSnapshot = {
@@ -132,6 +139,17 @@ export class ZuniaSessionImpl implements ZuniaSession {
     if (normalizeChainIds(options.chains).length === 0) {
       throw new ZuniaConnectError("INVALID_PARAMS", "Pass at least one chain id");
     }
+    // A restore still running (the page has just loaded) gives way to this.
+    this.generation++;
+    this.connecting++;
+    try {
+      await this.connectNow(options);
+    } finally {
+      this.connecting--;
+    }
+  }
+
+  private async connectNow(options: ZuniaWebConnectOptions): Promise<void> {
     let kind: ZuniaTransportKind;
     try {
       kind = await this.pick(options);
@@ -152,9 +170,12 @@ export class ZuniaSessionImpl implements ZuniaSession {
       await transport.connect(options);
     } catch (error) {
       const failure = toZuniaConnectError(error);
-      this.detach();
-      this.update({ status: "disconnected", transport: null, accounts: [], chains: [], pairing: undefined, error: failure });
-      this.bus.emit("error", failure);
+      // A later connect() may have replaced this transport: its state is not ours to reset.
+      if (this.active === transport) {
+        this.detach();
+        this.update({ status: "disconnected", transport: null, accounts: [], chains: [], pairing: undefined, error: failure });
+        this.bus.emit("error", failure);
+      }
       throw failure;
     }
     writeJson(resolveStorage(options.storage), STORAGE_KEYS.transport, { kind });
@@ -165,6 +186,8 @@ export class ZuniaSessionImpl implements ZuniaSession {
     if (this.restoring) return this.restoring;
     const live = ["connected", "locked", "reconnecting"].includes(this.snapshot.status);
     if (this.active && live) return Promise.resolve(true);
+    // The connection being made is the session: there is nothing to bring back under it.
+    if (this.connecting > 0) return Promise.resolve(false);
     this.restoring = this.restoreNow(options).finally(() => {
       this.restoring = null;
     });
@@ -172,11 +195,14 @@ export class ZuniaSessionImpl implements ZuniaSession {
   }
 
   private async restoreNow(options: ZuniaWebRestoreOptions): Promise<boolean> {
+    const generation = this.generation;
+    const overtaken = () => this.generation !== generation;
     const storage = resolveStorage(options.storage);
     const saved = (readJson(storage, STORAGE_KEYS.transport) as { kind?: unknown } | null)?.kind;
     const first = KINDS.find((kind) => kind === saved);
     const order = first ? [first, ...KINDS.filter((kind) => kind !== first)] : KINDS;
     for (const kind of order) {
+      if (overtaken()) return false;
       const transport = this.create(kind);
       this.attach(transport);
       let ok = false;
@@ -184,6 +210,12 @@ export class ZuniaSessionImpl implements ZuniaSession {
         ok = await transport.restore(options);
       } catch {
         ok = false;
+      }
+      if (overtaken()) {
+        // connect() or disconnect() owns the session now. The one still
+        // attached is dropped by connect(); one already detached is released.
+        if (ok && this.active !== transport) await transport.disconnect("replaced").catch(() => undefined);
+        return false;
       }
       if (ok) {
         writeJson(storage, STORAGE_KEYS.transport, { kind });
@@ -197,6 +229,7 @@ export class ZuniaSessionImpl implements ZuniaSession {
   }
 
   async disconnect(reason = "user"): Promise<void> {
+    this.generation++;
     await this.drop(reason);
   }
 
