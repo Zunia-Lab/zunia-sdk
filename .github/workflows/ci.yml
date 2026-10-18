@@ -31,3 +31,25 @@ jobs:
         run: pnpm check:packages
       - name: Install the tarballs in a Node script and a Vite app
         run: pnpm smoke:tarballs
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter/zunia_sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # The Dart client must pass the vectors the JS SDK and the wallet pass.
+      - name: Test vectors match packages/core
+        run: |
+          cmp test/fixtures/connect-v2-vectors.json ../../packages/core/test-vectors/connect-v2-vectors.json
+          cmp test/fixtures/sign-in-vectors.json ../../packages/core/test-vectors/sign-in-vectors.json
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test example
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter pub publish --dry-run

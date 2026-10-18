@@ -1,0 +1,39 @@
+name: Publish zunia_sdk to pub.dev
+
+# pub.dev publishes from a tag push only, authenticated by GitHub's OIDC token
+# (no secret to store). The package admin page on pub.dev must list this
+# repository with the tag pattern `zunia_sdk-v{{version}}`.
+on:
+  push:
+    tags: ["zunia_sdk-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: flutter/zunia_sdk
+    steps:
+      - uses: actions/checkout@v4
+      # Sets up the pub.dev credentials from the OIDC token.
+      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Check the tag matches pubspec.yaml
+        run: |
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
+          if [ "zunia_sdk-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "pubspec.yaml is at $version but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter pub publish --force

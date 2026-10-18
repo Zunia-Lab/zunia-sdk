@@ -1,14 +1,24 @@
 import 'package:flutter/widgets.dart';
 
-import 'session.dart';
+import 'types.dart';
 
 /// Official sizes for [ConnectWithZuniaButton].
-enum ConnectWithZuniaButtonSize { small, medium, large }
+enum ConnectWithZuniaButtonSize {
+  /// 30 px high.
+  small,
+
+  /// 44 px high, the minimum comfortable touch target.
+  medium,
+
+  /// 52 px high.
+  large,
+}
 
 /// Official Connect with Zunia button for Flutter dApps and companion apps.
 ///
 /// Matches the web SDK: white mark on the chevron accent gradient.
 class ConnectWithZuniaButton extends StatelessWidget {
+  /// Creates the button.
   const ConnectWithZuniaButton({
     super.key,
     required this.onPressed,
@@ -19,7 +29,10 @@ class ConnectWithZuniaButton extends StatelessWidget {
     this.onStatus,
   });
 
+  /// Called on tap. Null disables the button.
   final VoidCallback? onPressed;
+
+  /// Height and text size.
   final ConnectWithZuniaButtonSize size;
 
   /// Shows the spinner and disables the button while true.
@@ -28,6 +41,7 @@ class ConnectWithZuniaButton extends StatelessWidget {
   /// Alias for [busy] (web SDK uses `loading`).
   final bool loading;
 
+  /// The button text.
   final String label;
 
   /// Optional status listener when the parent drives session status updates.
@@ -50,70 +64,77 @@ class ConnectWithZuniaButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null && !_busy;
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment(-0.6, -0.8),
-            end: Alignment(0.8, 0.9),
-            colors: [
-              Color(0xFFFF1B0C),
-              Color(0xFFFF6A10),
-              Color(0xFFFFC414),
-            ],
-            stops: [0, 0.5, 1],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: enabled
-              ? const [
-                  BoxShadow(
-                    color: Color(0x47FF2D1F),
-                    blurRadius: 28,
-                    offset: Offset(0, 12),
-                  ),
-                ]
-              : null,
-        ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints.tightFor(height: _height),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: enabled
-                ? () {
-                    onStatus?.call(ZuniaSessionStatus.connecting);
-                    onPressed!();
-                  }
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      onTap: enabled ? onPressed : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment(-0.6, -0.8),
+              end: Alignment(0.8, 0.9),
+              colors: [
+                Color(0xFFFF1B0C),
+                Color(0xFFFF6A10),
+                Color(0xFFFFC414),
+              ],
+              stops: [0, 0.5, 1],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: enabled
+                ? const [
+                    BoxShadow(
+                      color: Color(0x47FF2D1F),
+                      blurRadius: 28,
+                      offset: Offset(0, 12),
+                    ),
+                  ]
                 : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_busy)
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: _SpinMark(),
-                    )
-                  else
-                    const CustomPaint(
-                      size: Size(16, 20),
-                      painter: _ZuniaMarkPainter(),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints.tightFor(height: _height),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled
+                  ? () {
+                      onStatus?.call(ZuniaSessionStatus.connecting);
+                      onPressed!();
+                    }
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_busy)
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: _SpinMark(),
+                      )
+                    else
+                      const CustomPaint(
+                        size: Size(16, 20),
+                        painter: _ZuniaMarkPainter(),
+                      ),
+                    const SizedBox(width: 10),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: const Color(0xFFFFFFFF),
+                        fontSize: _fontSize,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.2,
+                        fontFamily: 'Space Grotesk',
+                      ),
                     ),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: const Color(0xFFFFFFFF),
-                      fontSize: _fontSize,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.2,
-                      fontFamily: 'Space Grotesk',
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

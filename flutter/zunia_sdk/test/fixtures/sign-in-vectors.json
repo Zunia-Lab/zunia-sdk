@@ -1,0 +1,557 @@
+{
+  "version": 1,
+  "about": "Sign in with Zunia test vectors, shared by the extension, the JS SDK and the mobile wallet. A message is its lines joined with \\n. Valid vectors are the exact text a builder produces from `fields` and the parse a wallet returns. Binding vectors check a parsed message against the request: the page origin, the chain and signer it asked for, and the wallet clock (`now`).",
+  "valid": [
+    {
+      "name": "minimal",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "fields": {
+        "domain": "app.example.com",
+        "address": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "uri": "https://app.example.com",
+        "version": "1",
+        "chainId": "cosmoshub-4",
+        "nonce": "8f3k2m9QxZ",
+        "issuedAt": "2026-09-24T10:00:00.000Z"
+      }
+    },
+    {
+      "name": "every optional field",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "Sign in to Example. This request does not move funds.",
+        "",
+        "URI: https://app.example.com/login",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Expiration Time: 2026-09-24T10:10:00.000Z",
+        "Not Before: 2026-09-24T10:00:00.000Z",
+        "Request ID: req-42",
+        "Resources:",
+        "- https://app.example.com/terms",
+        "- ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+      ],
+      "fields": {
+        "domain": "app.example.com",
+        "address": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "statement": "Sign in to Example. This request does not move funds.",
+        "uri": "https://app.example.com/login",
+        "version": "1",
+        "chainId": "cosmoshub-4",
+        "nonce": "8f3k2m9QxZ",
+        "issuedAt": "2026-09-24T10:00:00.000Z",
+        "expirationTime": "2026-09-24T10:10:00.000Z",
+        "notBefore": "2026-09-24T10:00:00.000Z",
+        "requestId": "req-42",
+        "resources": [
+          "https://app.example.com/terms",
+          "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+        ]
+      }
+    },
+    {
+      "name": "local development host with a port and a time zone offset",
+      "lines": [
+        "localhost:3000 wants you to sign in with your Cosmos account:",
+        "osmo1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5helwsw",
+        "",
+        "URI: http://localhost:3000",
+        "Version: 1",
+        "Chain ID: osmosis-1",
+        "Nonce: abcdefgh12345678",
+        "Issued At: 2026-09-24T12:00:00+02:00",
+        "Expiration Time: 2026-09-24T12:05:00+02:00"
+      ],
+      "fields": {
+        "domain": "localhost:3000",
+        "address": "osmo1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5helwsw",
+        "uri": "http://localhost:3000",
+        "version": "1",
+        "chainId": "osmosis-1",
+        "nonce": "abcdefgh12345678",
+        "issuedAt": "2026-09-24T12:00:00+02:00",
+        "expirationTime": "2026-09-24T12:05:00+02:00"
+      }
+    },
+    {
+      "name": "statement with accented letters",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "Connectez-vous à Exemple.",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "fields": {
+        "domain": "app.example.com",
+        "address": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "statement": "Connectez-vous à Exemple.",
+        "uri": "https://app.example.com",
+        "version": "1",
+        "chainId": "cosmoshub-4",
+        "nonce": "8f3k2m9QxZ",
+        "issuedAt": "2026-09-24T10:00:00.000Z"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "another ecosystem",
+      "lines": [
+        "app.example.com wants you to sign in with your Ethereum account:",
+        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: 1",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "trailing newline",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        ""
+      ]
+    },
+    {
+      "name": "CRLF line endings",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:\r",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu\r",
+        "\r",
+        "URI: https://app.example.com\r",
+        "Version: 1\r",
+        "Chain ID: cosmoshub-4\r",
+        "Nonce: 8f3k2m9QxZ\r",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "no blank line after the address",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "two blank lines instead of a statement",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "version 2",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 2",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "nonce shorter than 8 characters",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: abc123",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "nonce with symbols",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: abc-def-ghi",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "date without a time zone",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00"
+      ]
+    },
+    {
+      "name": "fields out of order",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Chain ID: cosmoshub-4",
+        "Version: 1",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "unknown trailing field",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Session: forever"
+      ]
+    },
+    {
+      "name": "bidirectional override in the statement",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "Sign in to \u202eelpmaxe",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "uppercase address",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "COSMOS1QYPQXPQ9QCRSSZG2PVXQ6RS0ZQG3YYC5LZV7XU",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "domain with a path",
+      "lines": [
+        "app.example.com/login wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ]
+    },
+    {
+      "name": "resources header without entries",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Resources:"
+      ]
+    }
+  ],
+  "binding": [
+    {
+      "name": "the site, chain and account that asked",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Expiration Time: 2026-09-24T10:10:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ok"
+    },
+    {
+      "name": "another site asking",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://evil.example",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ORIGIN_MISMATCH"
+    },
+    {
+      "name": "a subdomain of the named site asking",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://www.app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ORIGIN_MISMATCH"
+    },
+    {
+      "name": "the same host over plain http",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "http://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ORIGIN_MISMATCH"
+    },
+    {
+      "name": "a URI on another site",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://evil.example/login",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ORIGIN_MISMATCH"
+    },
+    {
+      "name": "another port on localhost",
+      "lines": [
+        "localhost:3000 wants you to sign in with your Cosmos account:",
+        "osmo1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5helwsw",
+        "",
+        "URI: http://localhost:3000",
+        "Version: 1",
+        "Chain ID: osmosis-1",
+        "Nonce: abcdefgh12345678",
+        "Issued At: 2026-09-24T12:00:00+02:00"
+      ],
+      "origin": "http://localhost:3001",
+      "chainId": "osmosis-1",
+      "signer": "osmo1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5helwsw",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "ORIGIN_MISMATCH"
+    },
+    {
+      "name": "another chain than the one asked on",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "theta-testnet-001",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "INVALID_PARAMS"
+    },
+    {
+      "name": "another account than the signer",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos15zs69gay5kn2029f4246etdw47ctrv4njhcy02",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "INVALID_PARAMS"
+    },
+    {
+      "name": "issued within the allowed clock skew",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T09:57:00.000Z",
+      "expect": "ok"
+    },
+    {
+      "name": "issued more than five minutes in the future",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T09:50:00.000Z",
+      "expect": "INVALID_PARAMS"
+    },
+    {
+      "name": "expired",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Expiration Time: 2026-09-24T10:10:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:10:00.000Z",
+      "expect": "INVALID_PARAMS"
+    },
+    {
+      "name": "expires before it was issued",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Expiration Time: 2026-09-24T09:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "INVALID_PARAMS"
+    },
+    {
+      "name": "not valid yet",
+      "lines": [
+        "app.example.com wants you to sign in with your Cosmos account:",
+        "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+        "",
+        "URI: https://app.example.com",
+        "Version: 1",
+        "Chain ID: cosmoshub-4",
+        "Nonce: 8f3k2m9QxZ",
+        "Issued At: 2026-09-24T10:00:00.000Z",
+        "Not Before: 2026-09-24T11:00:00.000Z"
+      ],
+      "origin": "https://app.example.com",
+      "chainId": "cosmoshub-4",
+      "signer": "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu",
+      "now": "2026-09-24T10:01:00.000Z",
+      "expect": "INVALID_PARAMS"
+    }
+  ]
+}
