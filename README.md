@@ -28,8 +28,8 @@
 One session API, three ways to reach the wallet:
 
 1. **Browser extension.** The Zunia extension (Chrome, Edge, Firefox and Safari builds) injects `window.zunia`. Picked first when present.
-2. **Phone, by QR code.** The dApp shows a QR code, Zunia mobile scans it, and both sides talk through the Zunia relay. Messages are end-to-end encrypted (X25519, ChaCha20-Poly1305); the relay only forwards ciphertext. Both screens show the same 6-digit code, and the phone sees the site's origin as checked by the relay.
-3. **WalletConnect v2.** For other wallets. The Zunia mobile app accepts WalletConnect sessions but does not sign WalletConnect requests yet, so pair Zunia mobile by QR code.
+2. **Phone, by QR code.** The dApp shows a QR code, Zunia mobile scans it, and both sides talk through the Zunia relay. Messages are end-to-end encrypted (X25519, ChaCha20-Poly1305); the relay only forwards ciphertext. Both screens show the same 6-digit code, and the phone sees the site's origin as checked by the relay. On the phone itself, the page opens Zunia with a link instead (`pairing.appUri`), and Zunia brings the user back.
+3. **WalletConnect v2.** For other wallets. Zunia mobile 0.1.0 answers WalletConnect only in builds that include a WalletConnect project id, so pair Zunia mobile by QR code: it needs no project id and shows the user the verified origin.
 
 Every transport returns the same shapes (`Uint8Array`, `bigint`), emits the same events and uses the same error codes.
 

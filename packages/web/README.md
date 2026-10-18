@@ -89,7 +89,7 @@ await session.connect({
 });
 ```
 
-WalletConnect is loaded through the function you pass, so apps that do not use it never bundle it. Show `session.pairing.uri` as a QR code the same way. The Zunia mobile app accepts WalletConnect sessions but does not sign WalletConnect requests yet: pair it with `native-ws` instead.
+WalletConnect is loaded through the function you pass, so apps that do not use it never bundle it. Show `session.pairing.uri` as a QR code the same way. Zunia mobile 0.1.0 answers WalletConnect only in builds that include a WalletConnect project id: pair it with `native-ws` instead, which needs no project id and shows the user the verified origin.
 
 ## Sign in
 
