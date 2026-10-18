@@ -115,13 +115,15 @@ Every transport rejects with `ZuniaConnectError` and one `code`:
 | `NETWORK` | The relay or WalletConnect could not be reached. |
 | `INTERNAL` | Anything else. |
 
-`error.reason` narrows the cases where the next step differs: `blind-signing` and `amino-escaping` (both `UNSUPPORTED`: this Zunia version cannot sign the transaction as asked, so update it), `prompt-expired` (`TIMEOUT`: nobody answered the wallet's prompt) and `stale-page` (`DISCONNECTED`: the extension was updated or reloaded under the page).
+`error.reason` narrows the cases where the next step differs: `blind-signing` and `amino-escaping` (both `UNSUPPORTED`: this Zunia version cannot sign the transaction as asked, so update it), `prompt-expired` (`TIMEOUT`: nobody answered the wallet's prompt), `stale-page` (`DISCONNECTED`: the extension was updated or reloaded under the page), `too-large` (`INVALID_PARAMS`: the request is over the relay's 512 KiB frame limit once encrypted, nothing was sent) and `queue-full` (`NETWORK`: the phone is offline and the relay already holds all it can for it, so the request was not delivered).
 
 `explainZuniaError(error)` turns any of them into words for a toast or an inline message: a short `title`, a `message` with the next step, whether trying again can help (`retryable`), and the wallet's own text as `detail`.
 
 ## For wallet implementers
 
-`ConnectCipher`, `deriveConnectKeys`, `verificationCodeFrom`, `parsePairingUri` and the frame types implement the wallet side of `zunia.connect.v2` as well as the dApp side. `test-vectors/connect-v2-vectors.json` (in this package) has key agreements, frames and pairing URIs to check another implementation against; `test-vectors/sign-in-vectors.json` does the same for sign-in messages.
+`ConnectCipher`, `deriveConnectKeys`, `verificationCodeFrom`, `parsePairingUri` and the frame types implement the wallet side of `zunia.connect.v2` as well as the dApp side. `test-vectors/connect-v2-vectors.json` (in this package) has key agreements, frames, pairing URIs (with and without `ret`), the return targets a wallet follows and wake links to check another implementation against; `test-vectors/sign-in-vectors.json` does the same for sign-in messages.
+
+App-to-app return: a pairing link may carry `ret`, where the wallet goes after the user answers when the link opened it on the same device. `isValidReturnUrl` is the rule (an `https:` URL with a host, or an app's own scheme other than `zunia`, `zuniamobile`, `wc`, `javascript`, `data`, `file`, `blob`, `about`, `content`, `intent` and `http`; RFC 3986 characters; at most 512 characters); wallets ignore any other value. `buildWakeUri(sessionId)` / `parseWakeUri` handle `zunia://connect/wake?sid=...`, which brings a paired session up in the wallet and never pairs. `ZUNIA_CONNECT_LIMITS` holds the relay's frame and queue limits, and `ConnectCipher.sealedBytes(message)` the exact size a message will have on the wire.
 
 ## License
 

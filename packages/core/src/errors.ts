@@ -42,7 +42,11 @@ export type ZuniaErrorReason =
   /** `TIMEOUT`: the wallet's prompt ran out before anyone answered. */
   | "prompt-expired"
   /** `DISCONNECTED`: the extension was updated or reloaded under this page. */
-  | "stale-page";
+  | "stale-page"
+  /** `INVALID_PARAMS`: the request is over the relay's 512 KiB frame limit once sealed. Nothing was sent. */
+  | "too-large"
+  /** `NETWORK`: the phone is offline and the relay's queue for it is full. The request never reached it. */
+  | "queue-full";
 
 export class ZuniaConnectError extends Error {
   readonly code: ZuniaConnectErrorCode;
@@ -154,6 +158,16 @@ const REASON_COPY: Record<ZuniaErrorReason, Copy> = {
   },
   "prompt-expired": { title: "No answer in time", message: "The Zunia prompt expired before it was answered. Try again.", retryable: true },
   "stale-page": { title: "Reload this page", message: "Zunia was updated or reloaded. Reload this page, then try again.", retryable: false },
+  "too-large": {
+    title: "Request too large",
+    message: "This request is too large to send to Zunia mobile, so nothing was sent. Split it into smaller transactions.",
+    retryable: false,
+  },
+  "queue-full": {
+    title: "Phone unreachable",
+    message: "Zunia mobile is offline and already has requests waiting, so this one was not delivered. Open Zunia on your phone, then try again.",
+    retryable: true,
+  },
 };
 
 const CODE_COPY: Record<ZuniaConnectErrorCode, Copy> = {

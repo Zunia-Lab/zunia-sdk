@@ -50,6 +50,11 @@ export const ZUNIA_NATIVE_CONNECT = {
   pairedTtlSeconds: 86_400,
   deepLinkPath: "zunia://connect",
   universalPath: "https://zunialab.com/connect",
+  /** Wake link base: `?sid=<session id>` brings a paired session up in Zunia. */
+  wakePath: "zunia://connect/wake",
+  universalWakePath: "https://zunialab.com/connect/wake",
+  /** Query parameter of the pairing URI that holds the return target. */
+  returnParam: "ret",
 } as const;
 
 export const ZUNIA_EXTENSION_IDS = {

@@ -83,6 +83,7 @@ export {
   encryptFrame,
   frameAad,
   generateConnectKeyPair,
+  sealedFrameBytes,
   verificationCodeFrom,
 } from "./connect-crypto.js";
 export type {
@@ -95,12 +96,18 @@ export type {
 } from "./connect-crypto.js";
 
 export {
+  BLOCKED_RETURN_SCHEMES,
+  RETURN_URL_MAX_LENGTH,
   ZUNIA_CONNECT_CLOSE_CODES,
+  ZUNIA_CONNECT_LIMITS,
   ZUNIA_CONNECT_PATHS,
   ZUNIA_CONNECT_PROTOCOL,
   ZUNIA_CONNECT_TOKEN_PROTOCOL_PREFIX,
   buildPairingUri,
+  buildWakeUri,
+  isValidReturnUrl,
   parsePairingUri,
+  parseWakeUri,
 } from "./protocol.js";
 export type {
   CreateConnectSessionResponse,
