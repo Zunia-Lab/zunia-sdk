@@ -119,4 +119,71 @@ describe("ZuniaSessionImpl with QR pairing", () => {
     await session.disconnect();
     assert.equal(session.getSnapshot().status, "disconnected");
   });
+
+  it("keeps a QR connection started while a restore is still running", async () => {
+    // The extension answers slowly, so the restore a page runs on load is still
+    // waiting on it when the person presses Connect.
+    const provider = new FakeProvider();
+    let answer!: () => void;
+    const slow = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    provider.getConnectedChains = async () => {
+      await slow;
+      return [];
+    };
+    const storage = new MemoryStorage();
+    const session = new ZuniaSessionImpl({ extension: { provider }, nativeWs: { reconnectMinMs: 20 } });
+    let pairing: ZuniaPairing | undefined;
+    session.on("pairing", (value) => {
+      pairing = value;
+    });
+    const restoring = session.restore({ storage });
+    const connecting = session.connect({
+      chains: [HUB],
+      prefer: "native-ws",
+      apiBase: relay.apiBase,
+      storage,
+      openInstallIfMissing: false,
+    });
+    await waitFor(() => Boolean(pairing), 3_000, "pairing");
+    answer();
+    assert.equal(await restoring, false);
+    assert.equal(session.getSnapshot().status, "awaiting_wallet");
+    assert.equal(session.getSnapshot().pairing?.uri, pairing!.uri);
+
+    const wallet = new FakeWallet([wireAccount(HUB, "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu")]);
+    await wallet.pair(pairing!.uri);
+    await connecting;
+    assert.equal(session.getSnapshot().status, "connected");
+    assert.equal(session.transport, "native-ws");
+    assert.equal(provider.disabled.length, 0, "the extension's grant is left alone");
+    await session.disconnect();
+  });
+
+  it("does not let a restore started during a connection take it over", async () => {
+    const storage = new MemoryStorage();
+    const session = new ZuniaSessionImpl({ nativeWs: { reconnectMinMs: 20 } });
+    let pairing: ZuniaPairing | undefined;
+    session.on("pairing", (value) => {
+      pairing = value;
+    });
+    const connecting = session.connect({
+      chains: [HUB],
+      prefer: "native-ws",
+      apiBase: relay.apiBase,
+      storage,
+      openInstallIfMissing: false,
+    });
+    await waitFor(() => Boolean(pairing), 3_000, "pairing");
+    // Another component mounting now (useZuniaSession restores on mount).
+    assert.equal(await session.restore({ storage }), false);
+    assert.equal(session.getSnapshot().status, "awaiting_wallet");
+
+    const wallet = new FakeWallet([wireAccount(HUB, "cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu")]);
+    await wallet.pair(pairing!.uri);
+    await connecting;
+    assert.equal(session.getSnapshot().status, "connected");
+    await session.disconnect();
+  });
 });
