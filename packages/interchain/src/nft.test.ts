@@ -272,12 +272,14 @@ test("message builders reject an address from another chain", () => {
  * Smart queries
  * -------------------------------------------------------------------------- */
 
-test("smartQueryPath encodes the query as unpadded base64url", () => {
+test("smartQueryPath encodes the query as padded base64url", () => {
+  // 17 bytes of JSON: the gateway rejects it unless the padding is there.
   const path = smartQueryPath(COLLECTION, { num_tokens: {} });
   const match = SMART_PATH.exec(path);
   assert.ok(match);
   assert.equal(match[1], COLLECTION);
-  assert.ok(!(match[2] ?? "").includes("="), "base64url in a path must not be padded");
+  assert.equal(match[2], "eyJudW1fdG9rZW5zIjp7fX0=");
+  assert.ok(!/[+/]/.test(match[2] ?? ""), "a / in the path would split the route");
   assert.equal(decodeBase64UrlUtf8(match[2] ?? ""), '{"num_tokens":{}}');
 });
 
@@ -617,6 +619,28 @@ test("getCollectionInfo reports contract-error when neither spelling works", asy
     "contract-error",
   );
   assert.match(error.message, /neither collection_info nor contract_info/);
+});
+
+test("a contract's own HTTP 500 rejection is a contract-error, not an outage", async () => {
+  const stub = stubLcd(() => {
+    throw new InterchainError(
+      "lcd-unreachable",
+      "https://lcd.example HTTP 500: Error parsing into type cw721::msg::QueryMsg: query wasm contract failed",
+      { httpStatus: 500 },
+    );
+  });
+  const error = await expectRejects(
+    listOwnedTokenIds(ctxOf(stub), COLLECTION, OWNER),
+    "contract-error",
+  );
+  assert.equal(error.httpStatus, 500);
+});
+
+test("a bare HTTP 500 is still reported as the node failing", async () => {
+  const stub = stubLcd(() => {
+    throw new InterchainError("lcd-unreachable", "HTTP 500", { httpStatus: 500 });
+  });
+  await expectRejects(listOwnedTokenIds(ctxOf(stub), COLLECTION, OWNER), "lcd-unreachable");
 });
 
 test("getCollectionInfo does not swallow a genuinely unreachable node", async () => {

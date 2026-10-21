@@ -103,8 +103,18 @@ test("jsonToBase64Url encodes a CW721 smart query for a URL path", () => {
   const query = { nft_info: { token_id: "42" } };
   const encoded = jsonToBase64Url(query);
 
-  assert.equal(/[+/=]/.test(encoded), false, encoded);
+  assert.equal(/[+/]/.test(encoded), false, encoded);
   assert.deepEqual(base64ToJson(encoded), query);
+});
+
+test("jsonToBase64Url keeps the padding the REST gateway needs to decode it", () => {
+  // 20 bytes of JSON: unpadded, Safrochain and Osmosis answer HTTP 400.
+  assert.equal(jsonToBase64Url({ contract_info: {} }), "eyJjb250cmFjdF9pbmZvIjp7fX0=");
+  // Both padding lengths, and the url-safe alphabet where standard has + and /.
+  assert.equal(jsonToBase64Url({ a: 1 }).endsWith("="), true);
+  const tricky = { nft_info: { token_id: "t?>>>>>" } };
+  assert.equal(jsonToBase64Url(tricky), "eyJuZnRfaW5mbyI6eyJ0b2tlbl9pZCI6InQ_Pj4-Pj4ifX0=");
+  assert.deepEqual(base64ToJson(jsonToBase64Url(tricky)), tricky);
 });
 
 test("jsonToBase64 encodes an ICS721 send_nft payload", () => {
