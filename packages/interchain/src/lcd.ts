@@ -182,6 +182,16 @@ function classifyStatus(status: number): "retry" | "fallback" | "fatal" {
   return "fatal";
 }
 
+/**
+ * A 500 that is the contract's own answer, not the node failing: wasmd wraps
+ * every smart-query rejection (an unknown query variant, a token that does not
+ * exist) as "…: query wasm contract failed". Asking again, or asking another
+ * endpoint, gets the same answer, so it is final.
+ */
+function isContractAnswer(status: number, detail: string): boolean {
+  return status === 500 && /wasm contract failed/i.test(detail);
+}
+
 function isAbortError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -532,7 +542,9 @@ export function createLcdClient(config: LcdClientConfig): LcdClientHandle {
           return body;
         } catch (error) {
           if (error instanceof HttpFailure) {
-            const verdict = classifyStatus(error.status);
+            const verdict = isContractAnswer(error.status, error.detail)
+              ? "fatal"
+              : classifyStatus(error.status);
             lastError = error.toInterchainError();
             if (verdict === "fatal") throw lastError;
             if (verdict === "fallback") break;

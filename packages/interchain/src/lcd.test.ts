@@ -180,6 +180,34 @@ test("a 404 falls back without retrying; a 400 stops immediately", async () => {
   assert.equal(bad.urls.length, 1, "a 400 is an answer, not a transport failure");
 });
 
+test("a contract's own rejection is final: no retry, no other endpoint", async () => {
+  const rejection = () =>
+    new Response(
+      JSON.stringify({
+        code: 2,
+        message:
+          "Error parsing into type cw721::msg::QueryMsg: unknown variant `collection_info`: query wasm contract failed",
+        details: [],
+      }),
+      { status: 500 },
+    );
+  const rec = recorder([async () => rejection(), ok({ from: "b" })]);
+  const client = createLcdClient(
+    config({
+      endpoints: ["https://a.example", "https://b.example"],
+      fetchImpl: rec.fetchImpl,
+      retries: 3,
+    }),
+  );
+  await assert.rejects(client.getJson("/smart"), (error: unknown) => {
+    assert.ok(isInterchainError(error));
+    // Still a 500, so a caller trying another query spelling sees "unsupported".
+    assert.equal(error.httpStatus, 500);
+    return true;
+  });
+  assert.equal(rec.urls.length, 1, "the same contract answers the same way everywhere");
+});
+
 test("a contract error keeps the gateway message", async () => {
   const rec = recorder([
     async () =>

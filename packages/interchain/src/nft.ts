@@ -339,10 +339,10 @@ export async function smartQuery(
  * Reclassify an LCD failure that is really the contract saying no.
  *
  * wasmd answers an unparseable or unsupported query with HTTP 400 carrying the
- * serde error. `lcd.ts` treats a 400 as fatal and reports `lcd-unreachable`,
- * which would tell the user the network is down when the truth is that this
- * contract does not implement this query. The body text does not survive
- * `lcd.ts`, so the message names the query instead.
+ * serde error, and a query the contract itself refuses with HTTP 500. `lcd.ts`
+ * reports both as `lcd-unreachable`, which would tell the user the network is
+ * down when the truth is that this contract does not implement this query.
+ * The 400's body does not survive `lcd.ts`, so the message names the query.
  */
 function asContractError(
   error: unknown,
@@ -357,6 +357,16 @@ function asContractError(
       "contract-error",
       `${chainId}: ${contract} rejected "${messageAction(query)}" (HTTP 400)`,
       { chainId, httpStatus: 400, cause: error },
+    );
+  }
+  // wasmd's other way of saying no: HTTP 500 ending "query wasm contract
+  // failed" (an unknown variant on some versions, a missing token). Reported
+  // as unreachable, it told users a healthy node was down.
+  if (error.httpStatus === 500 && /wasm contract failed/i.test(error.message)) {
+    return new InterchainError(
+      "contract-error",
+      `${chainId}: ${contract} rejected "${messageAction(query)}"`,
+      { chainId, httpStatus: 500, cause: error },
     );
   }
   return error;

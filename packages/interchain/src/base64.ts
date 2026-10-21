@@ -183,12 +183,17 @@ export function jsonToBase64(value: JsonValue): string {
 }
 
 /**
- * Serialise a value and encode it as base64url.
+ * Serialise a value and encode it as padded base64url.
  *
- * The form a CosmWasm smart query path wants.
+ * The form a CosmWasm smart query path wants. The REST gateway decodes
+ * `query_data` with Go's standard alphabet, then the url-safe one *with*
+ * padding: an unpadded value is rejected (HTTP 400, "illegal base64 data")
+ * whenever the JSON's length is not a multiple of three, which is two queries
+ * in three. The standard alphabet is no way out either, because a `/` in it,
+ * even percent-encoded, splits the route (HTTP 501).
  */
 export function jsonToBase64Url(value: JsonValue): string {
-  return encodeBase64UrlUtf8(JSON.stringify(value));
+  return encode(utf8ToBytes(JSON.stringify(value)), URL_SAFE, true);
 }
 
 /**
